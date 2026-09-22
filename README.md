@@ -57,3 +57,27 @@ ruff check .      # verifica
 ruff check --fix .  # corrige o que der
 ruff format .     # formata
 ```
+
+## Atalhos (Makefile)
+
+Para não decorar os comandos, há um `Makefile`:
+
+```bash
+make          # lista os atalhos disponíveis
+make venv     # cria o ambiente virtual em .venv
+make install  # instala as dependências de desenvolvimento
+make test     # roda os testes
+make lint     # roda o ruff
+make format   # formata o código
+make check    # lint + testes (rode antes de commitar)
+make run      # sobe o app Streamlit
+```
+
+Fluxo típico do zero:
+
+```bash
+make venv
+source .venv/bin/activate
+make install
+make check
+```
