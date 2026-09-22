@@ -67,7 +67,7 @@ def avaliar(
 
     palavras = [
         (n_linha, original, acertou)
-        for (n_linha, original, _), acertou in zip(tokens_letra, acertos)
+        for (n_linha, original, _), acertou in zip(tokens_letra, acertos, strict=True)
     ]
     return {
         "nota": nota,
