@@ -24,3 +24,17 @@ class TestConstruirPlayer:
     def test_sem_synced_retorna_aviso(self):
         html = construir_player_sincronizado([])
         assert "Sem letra sincronizada" in html
+
+    def test_com_audio_embute_e_segue_currenttime(self):
+        uri = "data:audio/mp4;base64,QQ=="
+        html = construir_player_sincronizado([(0.0, "x")], audio_data_uri=uri)
+        assert "<audio" in html
+        assert uri in html
+        assert "USAR_AUDIO = true" in html
+        assert 'id="play"' not in html  # botões escondidos quando há áudio
+
+    def test_sem_audio_mantem_cronometro_manual(self):
+        html = construir_player_sincronizado([(0.0, "x")])
+        assert "<audio" not in html
+        assert "USAR_AUDIO = false" in html
+        assert 'id="play"' in html

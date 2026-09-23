@@ -3,6 +3,7 @@
 Execute com:  streamlit run app.py
 """
 
+import base64
 import html
 import io
 
@@ -10,6 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
+from audio import baixar_audio
 from avaliacao import avaliar, normalizar_palavra
 from letras import buscar_letra_sincronizada
 from player import construir_player_sincronizado
@@ -89,6 +91,17 @@ def mostrar_feedback_por_linha(por_linha):
     )
 
 
+@st.cache_data(show_spinner="Baixando o áudio do link...")
+def carregar_audio(url: str) -> tuple[bytes, str] | None:
+    """Baixa o áudio da URL (cacheado por URL). (bytes, mimetype) ou None."""
+    return baixar_audio(url)
+
+
+def _data_uri(dados: bytes, mimetype: str) -> str:
+    b64 = base64.b64encode(dados).decode("ascii")
+    return f"data:{mimetype};base64,{b64}"
+
+
 def _chave_linha(texto: str) -> str:
     """Normaliza uma linha para casar letra digitada com a letra sincronizada."""
     return " ".join(filter(None, (normalizar_palavra(p) for p in texto.split())))
@@ -165,6 +178,18 @@ st.subheader("1. Escolha a música")
 url = st.text_input("Link do YouTube (de preferência uma versão karaokê/instrumental)")
 if url:
     st.video(url)
+    if st.button("🎵 Carregar áudio do YouTube"):
+        st.session_state["audio_musica"] = carregar_audio(url)
+        if not st.session_state["audio_musica"]:
+            st.warning("Não consegui baixar o áudio desse link.")
+
+audio_musica = st.session_state.get("audio_musica")
+if audio_musica:
+    st.audio(audio_musica[0], format=audio_musica[1])
+    st.caption(
+        "Áudio para uso pessoal/estudo. Dê play na Prévia sincronizada para a letra "
+        "acompanhar. (webm/opus pode não tocar no Safari; prefira links com m4a.)"
+    )
 
 # 2. Letra
 st.subheader("2. Letra")
@@ -181,11 +206,21 @@ if synced_atual:
         "✨ Letra sincronizada encontrada — a linha do tempo estará disponível no resultado."
     )
     with st.expander("🎤 Prévia sincronizada (cante junto)", expanded=True):
-        st.caption(
-            "Toque a música e clique ▶ — a letra destaca a linha atual. Use 'atraso (s)' "
-            "para alinhar. (Usa a letra sincronizada buscada, não o texto editado acima.)"
+        data_uri = _data_uri(*audio_musica) if audio_musica else None
+        if data_uri:
+            st.caption(
+                "Dê play no áudio — a letra acompanha o tempo real. 'atraso (s)' ajusta "
+                "o alinhamento. (Usa a letra sincronizada buscada, não o texto editado.)"
+            )
+        else:
+            st.caption(
+                "Clique ▶ (relógio manual) — a letra destaca a linha atual; 'atraso (s)' "
+                "alinha. Carregue o áudio acima para sincronizar automaticamente."
+            )
+        components.html(
+            construir_player_sincronizado(synced_atual, audio_data_uri=data_uri),
+            height=460,
         )
-        components.html(construir_player_sincronizado(synced_atual), height=400)
 
 # 3. Gravação
 st.subheader("3. Cante!")
