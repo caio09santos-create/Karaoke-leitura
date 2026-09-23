@@ -4,6 +4,7 @@ Execute com:  streamlit run app.py
 """
 
 import base64
+import hashlib
 import html
 import io
 
@@ -266,18 +267,30 @@ else:
     audio = st.audio_input("Clique para gravar e clique de novo para parar")
     audio_bytes = audio.getvalue() if audio else None
 
-# 4. Nota
+# 4. Nota (calculada automaticamente quando há gravação)
 st.subheader("4. Resultado")
-if st.button("Calcular nota", type="primary", disabled=not (audio_bytes and letra.strip())):
-    with st.spinner("Ouvindo sua apresentação..."):
-        transcricao, idioma_detectado, palavras_tempos = transcrever(
-            audio_bytes, IDIOMAS[idioma_nome], tamanho_modelo
-        )
+if not audio_bytes:
+    st.caption("Grave a sua voz na etapa 3 — a nota aparece aqui automaticamente.")
+elif not letra.strip():
+    st.warning("Preencha a letra para calcular a nota.")
+else:
+    # Transcreve só quando a gravação (ou o modelo/idioma) muda; avaliar é barato.
+    chave = f"{hashlib.sha1(audio_bytes).hexdigest()}|{tamanho_modelo}|{idioma_nome}"
+    if st.session_state.get("chave_transcricao") != chave:
+        st.session_state["chave_transcricao"] = chave
+        with st.spinner("Ouvindo sua apresentação..."):
+            transcricao, idioma_det, tempos = transcrever(
+                audio_bytes, IDIOMAS[idioma_nome], tamanho_modelo
+            )
+        st.session_state["transcricao"] = transcricao
+        st.session_state["idioma_det"] = idioma_det
+        st.session_state["tempos"] = tempos
 
+    transcricao = st.session_state.get("transcricao", "")
     if not transcricao.strip():
         st.error("Não consegui ouvir nada. Verifique o microfone e tente de novo.")
     else:
-        resultado = avaliar(letra, transcricao, hipotese_tempos=palavras_tempos)
+        resultado = avaliar(letra, transcricao, hipotese_tempos=st.session_state.get("tempos"))
         c1, c2 = st.columns(2)
         c1.metric("Nota", f"{resultado['nota']}/100")
         c2.metric("Palavras certas", f"{resultado['acertos']} de {resultado['total']}")
@@ -298,5 +311,5 @@ if st.button("Calcular nota", type="primary", disabled=not (audio_bytes and letr
             mostrar_timeline(pontos)
 
         with st.expander("Ver o que o app entendeu"):
-            st.write(f"Idioma detectado: `{idioma_detectado}`")
+            st.write(f"Idioma detectado: `{st.session_state.get('idioma_det')}`")
             st.write(transcricao)

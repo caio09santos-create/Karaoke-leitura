@@ -83,6 +83,7 @@
 
     elAtraso.addEventListener("change", () => { atraso = parseFloat(elAtraso.value) || 0; });
     elBtn.addEventListener("click", () => { gravando ? parar() : iniciar(); });
+    elAudio.addEventListener("ended", () => { if (gravando) parar(); });  // fim da base -> para
 
     function onRender(args) {
       if (montado) return;               // monta uma única vez (não reseta em reruns)
