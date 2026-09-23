@@ -27,6 +27,13 @@
       color: #1e9e4a; font-weight: 700; font-size: 19px;
       transform: scale(1.02); transform-origin: left center;
     }
+    #contagem {
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      font-size: 88px; font-weight: 800; color: #d63333;
+      background: rgba(255, 255, 255, 0.88);
+    }
+    #contagem.on { display: flex; }
   </style>
 </head>
 <body>
@@ -37,6 +44,7 @@
     <span id="status"></span>
   </div>
   <div id="erro"></div>
+  <div id="contagem"></div>
   <audio id="audio" controls></audio>
   <div id="letras"></div>
 
@@ -68,6 +76,7 @@
     const elAtraso = document.getElementById("atraso");
     const elStatus = document.getElementById("status");
     const elErro = document.getElementById("erro");
+    const elContagem = document.getElementById("contagem");
     const elAudio = document.getElementById("audio");
     const elLetras = document.getElementById("letras");
     let divs = [];
@@ -105,6 +114,9 @@
         elErro.textContent = "Não foi possível acessar o microfone. Permita o acesso e tente de novo.";
         return;
       }
+      elBtn.disabled = true;
+      elStatus.textContent = "preparando…";
+      await contar(3);
       chunks = [];
       try {
         mediaRecorder = new MediaRecorder(stream);
@@ -120,9 +132,20 @@
       elLetras.scrollTop = 0;
       if (elAudio.src) { try { elAudio.currentTime = 0; await elAudio.play(); } catch (e) {} }
       gravando = true;
+      elBtn.disabled = false;
       elBtn.textContent = "⏹ Parar";
       elBtn.classList.add("gravando");
       elStatus.textContent = "🔴 gravando…";
+    }
+
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    async function contar(n) {
+      elContagem.classList.add("on");
+      for (let i = n; i >= 1; i--) { elContagem.textContent = i; await sleep(750); }
+      elContagem.textContent = "🎤";
+      await sleep(400);
+      elContagem.classList.remove("on");
     }
 
     function parar() {
