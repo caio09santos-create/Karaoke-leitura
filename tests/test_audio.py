@@ -1,7 +1,13 @@
 import sys
 import types
 
-from audio import _mimetype_por_ext, _opcoes_ydl, baixar_audio
+from audio import (
+    _limpar_titulo,
+    _mimetype_por_ext,
+    _opcoes_ydl,
+    _parsear_artista_titulo,
+    baixar_audio,
+)
 
 
 class TestMimetype:
@@ -67,3 +73,44 @@ class TestBaixarAudio:
         # Entrada None em sys.modules faz `import yt_dlp` levantar ImportError.
         monkeypatch.setitem(sys.modules, "yt_dlp", None)
         assert baixar_audio("http://exemplo/x") is None
+
+
+class TestLimparTitulo:
+    def test_remove_sufixos_comuns(self):
+        assert _limpar_titulo("Hello (Official Music Video)") == "Hello"
+        assert _limpar_titulo("Song [Official Audio]") == "Song"
+        assert _limpar_titulo("Faixa (Clipe Oficial)") == "Faixa"
+
+    def test_remove_marcador_karaoke(self):
+        assert _limpar_titulo("Quem de nós dois (Karaokê)") == "Quem de nós dois"
+
+    def test_corta_texto_promocional_apos_pipe(self):
+        assert _limpar_titulo("Ana Carolina | Solte a voz!") == "Ana Carolina"
+
+    def test_mantem_titulo_ja_limpo(self):
+        assert _limpar_titulo("Bohemian Rhapsody") == "Bohemian Rhapsody"
+
+
+class TestParsearArtistaTitulo:
+    def test_usa_artist_track_estruturados(self):
+        info = {"artist": "Queen", "track": "Bohemian Rhapsody", "title": "qualquer"}
+        assert _parsear_artista_titulo(info) == ("Queen", "Bohemian Rhapsody")
+
+    def test_infere_de_titulo_com_hifen(self):
+        info = {"title": "Adele - Hello (Official Music Video)", "uploader": "AdeleVEVO"}
+        assert _parsear_artista_titulo(info) == ("Adele", "Hello")
+
+    def test_uploader_topic_vira_artista(self):
+        info = {"title": "Hello (Official Audio)", "uploader": "Adele - Topic"}
+        assert _parsear_artista_titulo(info) == ("Adele", "Hello")
+
+    def test_sem_hifen_usa_canal(self):
+        info = {"title": "Bohemian Rhapsody", "channel": "QueenOfficial"}
+        assert _parsear_artista_titulo(info) == ("QueenOfficial", "Bohemian Rhapsody")
+
+    def test_karaoke_inverte_musica_e_artista(self):
+        info = {
+            "title": "Quem de nós dois (Karaokê) - Ana Carolina | Solte a voz!",
+            "uploader": "LiveSing Karaokê",
+        }
+        assert _parsear_artista_titulo(info) == ("Ana Carolina", "Quem de nós dois")

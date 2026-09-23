@@ -6,11 +6,11 @@ Você escolhe a música, busca (ou cola) a letra, grava sua voz pelo microfone e
 app transcreve o áudio com **Whisper**, compara com a letra e devolve uma nota de
 0 a 100 destacando as palavras certas (verde) e erradas (vermelho).
 
-Quando o LRCLIB tem a letra **sincronizada**, o app mostra uma **prévia ao vivo**
-(prompter): a linha atual é destacada e rolada no tempo. Se você **carregar o áudio**
-do link do YouTube (via `yt-dlp`), um único **▶ Iniciar** toca a base e grava o
-microfone ao mesmo tempo, com o realce seguindo a faixa; sem áudio, há um relógio
-manual (▶) com ajuste de "atraso".
+Ao colar o link do YouTube, o app já **baixa o áudio** (via `yt-dlp`) e **preenche
+artista, título e a letra** automaticamente (você pode editar). Quando o LRCLIB tem a
+letra **sincronizada**, um único **▶ Iniciar** toca a base e grava o microfone ao mesmo
+tempo, com a linha atual destacada seguindo a faixa; sem áudio, há um relógio manual (▶)
+com ajuste de "atraso".
 
 ## Estrutura
 

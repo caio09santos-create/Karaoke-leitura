@@ -11,7 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
-from audio import baixar_audio
+from audio import baixar_audio, extrair_metadados
 from avaliacao import avaliar, normalizar_palavra
 from gravador import gravar_cantando
 from letras import buscar_letra_sincronizada
@@ -98,6 +98,12 @@ def carregar_audio(url: str) -> tuple[bytes, str] | None:
     return baixar_audio(url)
 
 
+@st.cache_data(show_spinner="Lendo dados do vídeo...")
+def carregar_metadados(url: str) -> dict | None:
+    """Lê artista/título do vídeo (cacheado por URL)."""
+    return extrair_metadados(url)
+
+
 def _data_uri(dados: bytes, mimetype: str) -> str:
     b64 = base64.b64encode(dados).decode("ascii")
     return f"data:{mimetype};base64,{b64}"
@@ -179,10 +185,28 @@ st.subheader("1. Escolha a música")
 url = st.text_input("Link do YouTube (de preferência uma versão karaokê/instrumental)")
 if url:
     st.video(url)
-    if st.button("🎵 Carregar áudio do YouTube"):
+if url and url != st.session_state.get("url_processada"):
+    st.session_state["url_processada"] = url
+    st.session_state["synced"] = None
+    with st.spinner("Carregando o vídeo: áudio, artista/título e letra..."):
+        meta = carregar_metadados(url)
+        if meta:
+            st.session_state["artista"] = meta["artista"]
+            st.session_state["titulo"] = meta["titulo"]
+        else:
+            st.info("Não consegui ler artista/título do vídeo — preencha abaixo.")
+
         st.session_state["audio_musica"] = carregar_audio(url)
         if not st.session_state["audio_musica"]:
-            st.warning("Não consegui baixar o áudio desse link.")
+            st.warning("Não consegui baixar o áudio (letra e nota continuam funcionando).")
+
+        if meta:
+            dados = buscar_letra_sincronizada(meta["artista"], meta["titulo"])
+            if dados:
+                st.session_state["letra"] = dados["plain"]
+                st.session_state["synced"] = dados["synced"]
+            else:
+                st.info("Letra não encontrada automaticamente — ajuste os campos e busque abaixo.")
 
 audio_musica = st.session_state.get("audio_musica")
 if audio_musica:
