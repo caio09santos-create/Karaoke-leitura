@@ -61,7 +61,7 @@ def acao_buscar_letra():
     if not artista or not titulo:
         st.session_state["aviso"] = "Preencha artista e título."
         return
-    dados = buscar_letra_sincronizada(artista, titulo)
+    dados = buscar_letra_cache(artista, titulo)
     if dados:
         st.session_state["letra"] = dados["plain"]
         st.session_state["synced"] = dados["synced"]
@@ -102,6 +102,12 @@ def carregar_audio(url: str) -> tuple[bytes, str] | None:
 def carregar_metadados(url: str) -> dict | None:
     """Lê artista/título do vídeo (cacheado por URL)."""
     return extrair_metadados(url)
+
+
+@st.cache_data(show_spinner=False)
+def buscar_letra_cache(artista: str, titulo: str) -> dict | None:
+    """Busca a letra no LRCLIB (cacheada por artista+título)."""
+    return buscar_letra_sincronizada(artista, titulo)
 
 
 def _data_uri(dados: bytes, mimetype: str) -> str:
@@ -150,7 +156,7 @@ def mostrar_timeline(pontos):
         {"Trecho": p["texto"], "Referência": _mmss(p["referencia"]), "Você": _mmss(p["cantado"])}
         for p in pontos
     ]
-    st.dataframe(tabela, hide_index=True, use_container_width=True)
+    st.dataframe(tabela, hide_index=True, width="stretch")
 
     # Tempos relativos ao início de cada série, para comparar o ritmo.
     base_ref = pontos[0]["referencia"]
@@ -201,7 +207,7 @@ if url and url != st.session_state.get("url_processada"):
             st.warning("Não consegui baixar o áudio (letra e nota continuam funcionando).")
 
         if meta:
-            dados = buscar_letra_sincronizada(meta["artista"], meta["titulo"])
+            dados = buscar_letra_cache(meta["artista"], meta["titulo"])
             if dados:
                 st.session_state["letra"] = dados["plain"]
                 st.session_state["synced"] = dados["synced"]
