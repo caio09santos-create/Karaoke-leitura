@@ -116,6 +116,8 @@
       mediaRecorder.start();
       t0 = performance.now();
       idxAtual = -1;
+      divs.forEach((d) => d.classList.remove("ativa"));  // reseta destaque da take anterior
+      elLetras.scrollTop = 0;
       if (elAudio.src) { try { elAudio.currentTime = 0; await elAudio.play(); } catch (e) {} }
       gravando = true;
       elBtn.textContent = "⏹ Parar";
@@ -167,7 +169,7 @@
       elTempo.textContent = seg.toFixed(1) + "s";
       const idx = acharIdx(seg - atraso);
       if (idx !== idxAtual) {
-        if (idxAtual >= 0 && divs[idxAtual]) divs[idxAtual].classList.remove("ativa");
+        divs.forEach((d) => d.classList.remove("ativa"));  // um único destaque por vez
         if (idx >= 0 && divs[idx]) {
           divs[idx].classList.add("ativa");
           divs[idx].scrollIntoView({ block: "center", behavior: "smooth" });
