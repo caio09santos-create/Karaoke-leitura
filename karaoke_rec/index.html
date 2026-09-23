@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    #barra { display: flex; align-items: center; gap: 10px; padding: 6px 4px; flex-wrap: wrap; }
+    #btn {
+      font-size: 15px; font-weight: 600; padding: 8px 16px; cursor: pointer;
+      border: none; border-radius: 8px; background: #d63333; color: #fff;
+    }
+    #btn.gravando { background: #333; }
+    #btn:disabled { opacity: .5; cursor: default; }
+    #tempo { font-variant-numeric: tabular-nums; color: #555; min-width: 46px; }
+    #atraso { width: 64px; }
+    label { font-size: 12px; color: #666; }
+    #status { font-size: 12px; color: #888; }
+    #erro { color: #d63333; font-size: 13px; padding: 4px; }
+    audio { width: 100%; margin: 4px 0; }
+    #letras { height: 280px; overflow-y: auto; padding: 8px 4px; }
+    .linha {
+      padding: 4px 6px; color: #9aa0a6; font-size: 16px; line-height: 1.5;
+      transition: color .15s, transform .15s;
+    }
+    .linha.ativa {
+      color: #1e9e4a; font-weight: 700; font-size: 19px;
+      transform: scale(1.02); transform-origin: left center;
+    }
+  </style>
+</head>
+<body>
+  <div id="barra">
+    <button id="btn" type="button">▶ Iniciar (tocar + gravar)</button>
+    <span id="tempo">0.0s</span>
+    <label>atraso (s): <input id="atraso" type="number" step="0.5" value="0"></label>
+    <span id="status"></span>
+  </div>
+  <div id="erro"></div>
+  <audio id="audio" controls></audio>
+  <div id="letras"></div>
+
+  <script>
+    // ---- Protocolo v1 de componente do Streamlit (implementado à mão) ----
+    function post(msg) {
+      msg.isStreamlitMessage = true;
+      window.parent.postMessage(msg, "*");
+    }
+    const Streamlit = {
+      ready() { post({ type: "streamlit:componentReady", apiVersion: 1 }); },
+      setHeight(h) { post({ type: "streamlit:setFrameHeight", height: h }); },
+      setValue(v) { post({ type: "streamlit:setComponentValue", dataType: "json", value: v }); },
+    };
+
+    // ---- Estado ----
+    let LINHAS = [];
+    let atraso = 0;
+    let idxAtual = -1;
+    let gravando = false;
+    let montado = false;
+    let t0 = 0;                 // início da gravação (performance.now)
+    let mediaRecorder = null;
+    let chunks = [];
+    let stream = null;
+
+    const elBtn = document.getElementById("btn");
+    const elTempo = document.getElementById("tempo");
+    const elAtraso = document.getElementById("atraso");
+    const elStatus = document.getElementById("status");
+    const elErro = document.getElementById("erro");
+    const elAudio = document.getElementById("audio");
+    const elLetras = document.getElementById("letras");
+    let divs = [];
+
+    elAtraso.addEventListener("change", () => { atraso = parseFloat(elAtraso.value) || 0; });
+    elBtn.addEventListener("click", () => { gravando ? parar() : iniciar(); });
+
+    function onRender(args) {
+      if (montado) return;               // monta uma única vez (não reseta em reruns)
+      montado = true;
+      LINHAS = (args && args.synced) || [];
+      atraso = (args && args.atraso) || 0;
+      elAtraso.value = atraso;
+      if (args && args.audio) {
+        elAudio.src = args.audio;
+      } else {
+        elAudio.style.display = "none";
+      }
+      LINHAS.forEach(([t, txt]) => {
+        const d = document.createElement("div");
+        d.className = "linha";
+        d.textContent = txt;
+        elLetras.appendChild(d);
+      });
+      divs = [...elLetras.children];
+      Streamlit.setHeight(460);
+      requestAnimationFrame(tick);
+    }
+
+    async function iniciar() {
+      elErro.textContent = "";
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        elErro.textContent = "Não foi possível acessar o microfone. Permita o acesso e tente de novo.";
+        return;
+      }
+      chunks = [];
+      try {
+        mediaRecorder = new MediaRecorder(stream);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      }
+      mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRecorder.onstop = enviarGravacao;
+      mediaRecorder.start();
+      t0 = performance.now();
+      idxAtual = -1;
+      if (elAudio.src) { try { elAudio.currentTime = 0; await elAudio.play(); } catch (e) {} }
+      gravando = true;
+      elBtn.textContent = "⏹ Parar";
+      elBtn.classList.add("gravando");
+      elStatus.textContent = "🔴 gravando…";
+    }
+
+    function parar() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+      if (elAudio.src) elAudio.pause();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      gravando = false;
+      elBtn.textContent = "▶ Iniciar (tocar + gravar)";
+      elBtn.classList.remove("gravando");
+      elBtn.disabled = true;
+      elStatus.textContent = "processando…";
+    }
+
+    function enviarGravacao() {
+      const mime = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
+      const blob = new Blob(chunks, { type: mime });
+      const dur = (performance.now() - t0) / 1000;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const b64 = String(reader.result).split(",")[1] || "";
+        Streamlit.setValue({ audio_b64: b64, mime: blob.type, duracao_s: dur });
+        elStatus.textContent = "✅ gravação enviada — clique em Calcular nota";
+        elBtn.disabled = false;
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    function tempoAtual() {
+      if (elAudio.src && !elAudio.paused) return elAudio.currentTime;
+      if (gravando) return (performance.now() - t0) / 1000;
+      return elAudio.src ? elAudio.currentTime : 0;
+    }
+
+    function acharIdx(seg) {
+      let idx = -1;
+      for (let i = 0; i < LINHAS.length; i++) {
+        if (LINHAS[i][0] <= seg) idx = i; else break;
+      }
+      return idx;
+    }
+
+    function tick() {
+      const seg = tempoAtual();
+      elTempo.textContent = seg.toFixed(1) + "s";
+      const idx = acharIdx(seg - atraso);
+      if (idx !== idxAtual) {
+        if (idxAtual >= 0 && divs[idxAtual]) divs[idxAtual].classList.remove("ativa");
+        if (idx >= 0 && divs[idx]) {
+          divs[idx].classList.add("ativa");
+          divs[idx].scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+        idxAtual = idx;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    window.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "streamlit:render") onRender(e.data.args || {});
+    });
+    Streamlit.ready();
+  </script>
+</body>
+</html>

@@ -8,8 +8,9 @@ app transcreve o áudio com **Whisper**, compara com a letra e devolve uma nota 
 
 Quando o LRCLIB tem a letra **sincronizada**, o app mostra uma **prévia ao vivo**
 (prompter): a linha atual é destacada e rolada no tempo. Se você **carregar o áudio**
-do link do YouTube (via `yt-dlp`), o realce segue o tempo real da faixa; senão, há um
-relógio manual (▶) com ajuste de "atraso".
+do link do YouTube (via `yt-dlp`), um único **▶ Iniciar** toca a base e grava o
+microfone ao mesmo tempo, com o realce seguindo a faixa; sem áudio, há um relógio
+manual (▶) com ajuste de "atraso".
 
 ## Estrutura
 
@@ -20,6 +21,7 @@ relógio manual (▶) com ajuste de "atraso".
 | `avaliacao.py` | Tokenização e cálculo da nota (difflib + rapidfuzz) |
 | `audio.py` | Download do áudio do link (yt-dlp), em formato tocável no navegador |
 | `player.py` | Prompter de karaokê (HTML/JS) que destaca a linha atual ao vivo |
+| `gravador.py` + `karaoke_rec/` | Componente que toca a base e grava o microfone em um clique |
 | `tests/` | Testes unitários (pytest) |
 
 > O download de áudio do YouTube é para uso pessoal/estudo. Não é necessário `ffmpeg`

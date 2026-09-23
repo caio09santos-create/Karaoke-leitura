@@ -13,6 +13,7 @@ from faster_whisper import WhisperModel
 
 from audio import baixar_audio
 from avaliacao import avaliar, normalizar_palavra
+from gravador import gravar_cantando
 from letras import buscar_letra_sincronizada
 from player import construir_player_sincronizado
 
@@ -201,41 +202,46 @@ if st.session_state.get("aviso"):
     st.warning(st.session_state["aviso"])
 letra = st.text_area("Letra (você pode colar ou editar)", key="letra", height=250)
 synced_atual = st.session_state.get("synced")
-if synced_atual:
+if synced_atual and not audio_musica:
     st.caption(
-        "✨ Letra sincronizada encontrada — a linha do tempo estará disponível no resultado."
+        "✨ Letra sincronizada encontrada — feedback por linha e linha do tempo no resultado."
     )
     with st.expander("🎤 Prévia sincronizada (cante junto)", expanded=True):
-        data_uri = _data_uri(*audio_musica) if audio_musica else None
-        if data_uri:
-            st.caption(
-                "Dê play no áudio — a letra acompanha o tempo real. 'atraso (s)' ajusta "
-                "o alinhamento. (Usa a letra sincronizada buscada, não o texto editado.)"
-            )
-        else:
-            st.caption(
-                "Clique ▶ (relógio manual) — a letra destaca a linha atual; 'atraso (s)' "
-                "alinha. Carregue o áudio acima para sincronizar automaticamente."
-            )
-        components.html(
-            construir_player_sincronizado(synced_atual, audio_data_uri=data_uri),
-            height=460,
+        st.caption(
+            "Clique ▶ (relógio manual) — a letra destaca a linha atual; 'atraso (s)' alinha. "
+            "Carregue o áudio acima para tocar e gravar juntos na etapa 3."
         )
+        components.html(construir_player_sincronizado(synced_atual), height=400)
+elif synced_atual:
+    st.caption("✨ Letra sincronizada — na etapa 3 a base toca e grava junto, com realce ao vivo.")
 
 # 3. Gravação
 st.subheader("3. Cante!")
-st.info(
-    "Use fones de ouvido: se o microfone captar a música, "
-    "a voz do cantor original conta como sua."
-)
-audio = st.audio_input("Clique para gravar e clique de novo para parar")
+usar_gravador = bool(synced_atual and audio_musica)
+gravacao = None
+if usar_gravador:
+    st.caption(
+        "Clique **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao terminar. "
+        "Use fones de ouvido."
+    )
+    gravacao = gravar_cantando(
+        synced_atual, audio_data_uri=_data_uri(*audio_musica), key="grav_karaoke"
+    )
+    audio_bytes = gravacao[0] if gravacao else None
+else:
+    st.info(
+        "Use fones de ouvido: se o microfone captar a música, "
+        "a voz do cantor original conta como sua."
+    )
+    audio = st.audio_input("Clique para gravar e clique de novo para parar")
+    audio_bytes = audio.getvalue() if audio else None
 
 # 4. Nota
 st.subheader("4. Resultado")
-if st.button("Calcular nota", type="primary", disabled=not (audio and letra.strip())):
+if st.button("Calcular nota", type="primary", disabled=not (audio_bytes and letra.strip())):
     with st.spinner("Ouvindo sua apresentação..."):
         transcricao, idioma_detectado, palavras_tempos = transcrever(
-            audio.getvalue(), IDIOMAS[idioma_nome], tamanho_modelo
+            audio_bytes, IDIOMAS[idioma_nome], tamanho_modelo
         )
 
     if not transcricao.strip():
