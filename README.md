@@ -6,6 +6,10 @@ Você escolhe a música, busca (ou cola) a letra, grava sua voz pelo microfone e
 app transcreve o áudio com **Whisper**, compara com a letra e devolve uma nota de
 0 a 100 destacando as palavras certas (verde) e erradas (vermelho).
 
+Quando o LRCLIB tem a letra **sincronizada**, o app mostra uma **prévia ao vivo**
+(prompter): dê ▶ e a linha atual é destacada e rolada no tempo — com um ajuste de
+"atraso" para alinhar com a música que você toca à parte.
+
 ## Estrutura
 
 | Arquivo | Responsabilidade |
@@ -13,6 +17,7 @@ app transcreve o áudio com **Whisper**, compara com a letra e devolve uma nota 
 | `app.py` | Interface Streamlit e reconhecimento de voz (faster-whisper) |
 | `letras.py` | Busca de letras na API pública do [LRCLIB](https://lrclib.net) |
 | `avaliacao.py` | Tokenização e cálculo da nota (difflib + rapidfuzz) |
+| `player.py` | Prompter de karaokê (HTML/JS) que destaca a linha atual ao vivo |
 | `tests/` | Testes unitários (pytest) |
 
 ## Requisitos

@@ -7,10 +7,12 @@ import html
 import io
 
 import streamlit as st
+import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
 from avaliacao import avaliar, normalizar_palavra
 from letras import buscar_letra_sincronizada
+from player import construir_player_sincronizado
 
 st.set_page_config(page_title="Karaokê - Nota de Leitura", page_icon="🎤")
 
@@ -173,10 +175,17 @@ st.button("Buscar letra", on_click=acao_buscar_letra)
 if st.session_state.get("aviso"):
     st.warning(st.session_state["aviso"])
 letra = st.text_area("Letra (você pode colar ou editar)", key="letra", height=250)
-if st.session_state.get("synced"):
+synced_atual = st.session_state.get("synced")
+if synced_atual:
     st.caption(
         "✨ Letra sincronizada encontrada — a linha do tempo estará disponível no resultado."
     )
+    with st.expander("🎤 Prévia sincronizada (cante junto)", expanded=True):
+        st.caption(
+            "Toque a música e clique ▶ — a letra destaca a linha atual. Use 'atraso (s)' "
+            "para alinhar. (Usa a letra sincronizada buscada, não o texto editado acima.)"
+        )
+        components.html(construir_player_sincronizado(synced_atual), height=400)
 
 # 3. Gravação
 st.subheader("3. Cante!")
