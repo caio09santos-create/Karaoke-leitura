@@ -1,6 +1,6 @@
 import pytest
 
-from avaliacao import avaliar, normalizar_palavra, tokenizar
+from avaliacao import avaliar, normalizar_palavra, resumo_por_linha, tokenizar
 
 
 class TestNormalizarPalavra:
@@ -55,3 +55,46 @@ class TestAvaliar:
         palavras = resultado["palavras"]  # [(n_linha, original, acertou), ...]
         assert palavras[0] == (0, "sol", True)
         assert palavras[1] == (1, "lua", False)
+
+    def test_mantem_chaves_antigas_e_adiciona_por_linha(self):
+        resultado = avaliar("amor eterno", "amor eterno")
+        assert {"nota", "taxa", "acertos", "total", "palavras", "por_linha"} <= set(
+            resultado
+        )
+
+
+class TestResumoPorLinha:
+    def test_agrega_acertos_e_texto_por_linha(self):
+        resultado = avaliar("sol forte\nlua cheia", "sol forte xxxx yyyy")
+        por_linha = resultado["por_linha"]
+        assert por_linha[0]["texto"] == "sol forte"
+        assert por_linha[0]["acertos"] == 2 and por_linha[0]["total"] == 2
+        assert por_linha[0]["taxa"] == 1.0
+        assert por_linha[1]["acertos"] == 0 and por_linha[1]["taxa"] == 0.0
+
+    def test_tempo_cantado_e_a_mediana_dos_tempos_da_linha(self):
+        tempos = [("sol", 10.0), ("forte", 12.0), ("lua", 30.0), ("cheia", 34.0)]
+        resultado = avaliar("sol forte\nlua cheia", "sol forte lua cheia", hipotese_tempos=tempos)
+        por_linha = resultado["por_linha"]
+        assert por_linha[0]["tempo_cantado"] == 11.0  # mediana(10, 12)
+        assert por_linha[1]["tempo_cantado"] == 32.0  # mediana(30, 34)
+
+    def test_sem_tempos_o_tempo_cantado_e_none(self):
+        resultado = avaliar("sol forte", "sol forte")
+        assert resultado["por_linha"][0]["tempo_cantado"] is None
+
+    def test_funcao_isolada_com_dados_sinteticos(self):
+        tokens = [(0, "Sol", "sol"), (0, "forte", "forte"), (1, "Lua", "lua")]
+        acertos = [True, True, False]
+        tempos_por_ref = [5.0, 7.0, None]
+        resumo = resumo_por_linha(tokens, acertos, tempos_por_ref)
+        assert resumo[0] == {
+            "linha": 0,
+            "texto": "Sol forte",
+            "palavras": [("Sol", True), ("forte", True)],
+            "acertos": 2,
+            "total": 2,
+            "taxa": 1.0,
+            "tempo_cantado": 6.0,
+        }
+        assert resumo[1]["tempo_cantado"] is None and resumo[1]["acertos"] == 0

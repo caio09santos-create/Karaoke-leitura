@@ -1,5 +1,11 @@
 import letras
-from letras import _extrair_letra, buscar_letra, remover_tempos_lrc
+from letras import (
+    _extrair_letra,
+    buscar_letra,
+    buscar_letra_sincronizada,
+    parse_lrc,
+    remover_tempos_lrc,
+)
 
 
 class TestRemoverTemposLrc:
@@ -53,3 +59,54 @@ class TestBuscarLetra:
 
         monkeypatch.setattr(letras.requests, "get", fake_get)
         assert buscar_letra("Artista", "Titulo") is None
+
+
+class TestParseLrc:
+    def test_converte_tempo_para_segundos(self):
+        entrada = "[00:12.34]primeira\n[01:05.00]segunda"
+        assert parse_lrc(entrada) == [(12.34, "primeira"), (65.0, "segunda")]
+
+    def test_fracao_de_tres_digitos_e_milissegundos(self):
+        assert parse_lrc("[00:01.500]x") == [(1.5, "x")]
+
+    def test_ignora_linha_sem_marcacao(self):
+        assert parse_lrc("sem tempo\n[00:02.00]com") == [(2.0, "com")]
+
+    def test_ignora_linha_sem_texto(self):
+        assert parse_lrc("[00:01.00]\n[00:02.00]canta") == [(2.0, "canta")]
+
+
+def _get_search(get_resp, search_resp):
+    """Cria um fake de requests.get que responde por endpoint (/get vs /search)."""
+
+    def fake_get(url, **kwargs):
+        return get_resp if url.endswith("/get") else search_resp
+
+    return fake_get
+
+
+class TestBuscarLetraSincronizada:
+    def test_com_synced_retorna_plain_e_tempos(self, monkeypatch):
+        get_resp = _FakeResp(200, {"syncedLyrics": "[00:01.00]a\n[00:02.00]b"})
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, None))
+        dados = buscar_letra_sincronizada("Artista", "Titulo")
+        assert dados == {"plain": "a\nb", "synced": [(1.0, "a"), (2.0, "b")]}
+
+    def test_so_plain_deixa_synced_none(self, monkeypatch):
+        get_resp = _FakeResp(200, {"plainLyrics": "a\nb"})
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, None))
+        dados = buscar_letra_sincronizada("Artista", "Titulo")
+        assert dados == {"plain": "a\nb", "synced": None}
+
+    def test_instrumental_sem_resultado_retorna_none(self, monkeypatch):
+        get_resp = _FakeResp(200, {"instrumental": True})
+        search_resp = _FakeResp(200, [])
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, search_resp))
+        assert buscar_letra_sincronizada("Artista", "Titulo") is None
+
+    def test_erro_de_rede_retorna_none(self, monkeypatch):
+        def fake_get(url, **kwargs):
+            raise letras.requests.RequestException("sem rede")
+
+        monkeypatch.setattr(letras.requests, "get", fake_get)
+        assert buscar_letra_sincronizada("Artista", "Titulo") is None
