@@ -1,0 +1,6 @@
+# Dependências mínimas para lint + testes (CI).
+# Os testes não importam app.py, então não precisam de streamlit/faster-whisper.
+pytest>=8.2
+ruff>=0.6
+rapidfuzz>=3.9
+requests>=2.32

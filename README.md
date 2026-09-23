@@ -50,6 +50,15 @@ cantor original é contada como sua.
 pytest
 ```
 
+Os testes cobrem só a lógica (`avaliacao.py` e `letras.py`) e não importam `app.py`,
+então rodam com um conjunto enxuto de dependências (`requirements-test.txt`) — sem
+precisar de `streamlit`/`faster-whisper`. É isso que o CI usa.
+
+## CI
+
+O GitHub Actions (`.github/workflows/ci.yml`) roda `ruff check` + `pytest` a cada
+push e pull request, instalando apenas `requirements-test.txt`.
+
 ## Lint / formatação
 
 ```bash
