@@ -194,7 +194,13 @@ if url:
     st.video(url)
 if url and url != st.session_state.get("url_processada"):
     st.session_state["url_processada"] = url
+    # limpa o estado do link anterior (evita letra/áudio/nota "grudados")
+    for _k in ("artista", "titulo", "letra"):
+        st.session_state[_k] = ""
     st.session_state["synced"] = None
+    st.session_state["audio_musica"] = None
+    for _k in ("chave_transcricao", "transcricao", "tempos", "idioma_det"):
+        st.session_state.pop(_k, None)
     with st.spinner("Carregando o vídeo: áudio, artista/título e letra..."):
         meta = carregar_metadados(url)
         if meta:
@@ -256,8 +262,11 @@ if usar_gravador:
         "−/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
         "terminar. Use fones de ouvido."
     )
+    # key por música: troca de link remonta o componente com a base/letra novas
     gravacao = gravar_cantando(
-        synced_atual, audio_data_uri=_data_uri(*audio_musica), key="grav_karaoke"
+        synced_atual,
+        audio_data_uri=_data_uri(*audio_musica),
+        key="grav_" + hashlib.sha1(url.encode()).hexdigest()[:8],
     )
     audio_bytes = gravacao[0] if gravacao else None
 else:
