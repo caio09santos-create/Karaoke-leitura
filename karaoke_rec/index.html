@@ -24,9 +24,10 @@
       transition: color .15s, transform .15s;
     }
     .linha.ativa {
-      color: #1e9e4a; font-weight: 700; font-size: 19px;
-      transform: scale(1.02); transform-origin: left center;
+      font-size: 18px; transform: scale(1.01); transform-origin: left center;
     }
+    .palavra { color: #9aa0a6; transition: color .12s; }
+    .palavra.cantada { color: #1e9e4a; font-weight: 700; }
     #contagem {
       position: fixed; inset: 0; display: none;
       align-items: center; justify-content: center;
@@ -98,11 +99,12 @@
     const elMenos = document.getElementById("menos");
     const elMais = document.getElementById("mais");
     let divs = [];
+    let palavras = [];   // {el, t, linha} de cada palavra, em ordem de tempo
+    let k = 0;           // quantas palavras já foram "cantadas"
 
     function setAtraso(v) {
       atraso = Math.round(v * 100) / 100;
-      elAtraso.value = atraso;
-      idxAtual = -1;  // força recomputar o realce no próximo tick
+      elAtraso.value = atraso;  // o tick recomputa o realce a partir do novo atraso
     }
 
     elAtraso.addEventListener("change", () => setAtraso(parseFloat(elAtraso.value) || 0));
@@ -127,13 +129,28 @@
       } else {
         elAudio.style.display = "none";
       }
-      LINHAS.forEach(([t, txt]) => {
+      palavras = [];
+      divs = [];
+      LINHAS.forEach(([t, txt], i) => {
+        // janela da linha: do seu início até o início da próxima (ou +4s na última)
+        const fim = (i + 1 < LINHAS.length) ? LINHAS[i + 1][0] : t + 4;
+        const tokens = txt.split(/\s+/).filter(Boolean);
+        const totalCh = tokens.reduce((a, w) => a + w.length, 0) || 1;
         const d = document.createElement("div");
         d.className = "linha";
-        d.textContent = txt;
+        let acc = 0;
+        tokens.forEach((w) => {
+          const span = document.createElement("span");
+          span.className = "palavra";
+          span.textContent = w + " ";
+          span.dataset.t = t + (acc / totalCh) * (fim - t);  // tempo interpolado
+          palavras.push({ el: span, t: parseFloat(span.dataset.t), linha: i });
+          d.appendChild(span);
+          acc += w.length;
+        });
         elLetras.appendChild(d);
+        divs.push(d);
       });
-      divs = [...elLetras.children];
       Streamlit.setHeight(460);
       requestAnimationFrame(tick);
     }
@@ -159,8 +176,7 @@
       mediaRecorder.onstop = enviarGravacao;
       mediaRecorder.start();
       t0 = performance.now();
-      idxAtual = -1;
-      divs.forEach((d) => d.classList.remove("ativa"));  // reseta destaque da take anterior
+      resetRealce();  // reseta destaque da take anterior
       elLetras.scrollTop = 0;
       if (elAudio.src) { try { elAudio.currentTime = 0; await elAudio.play(); } catch (e) {} }
       gravando = true;
@@ -211,25 +227,34 @@
       return elAudio.src ? elAudio.currentTime : 0;
     }
 
-    function acharIdx(seg) {
-      let idx = -1;
-      for (let i = 0; i < LINHAS.length; i++) {
-        if (LINHAS[i][0] <= seg) idx = i; else break;
-      }
-      return idx;
+    function resetRealce() {
+      k = 0;
+      idxAtual = -1;
+      palavras.forEach((p) => p.el.classList.remove("cantada"));
+      divs.forEach((d) => d.classList.remove("ativa"));
     }
 
     function tick() {
-      const seg = tempoAtual();
-      elTempo.textContent = seg.toFixed(1) + "s";
-      const idx = acharIdx(seg - atraso);
-      if (idx !== idxAtual) {
-        divs.forEach((d) => d.classList.remove("ativa"));  // um único destaque por vez
-        if (idx >= 0 && divs[idx]) {
-          divs[idx].classList.add("ativa");
-          divs[idx].scrollIntoView({ block: "center", behavior: "smooth" });
+      const bruto = tempoAtual();
+      elTempo.textContent = bruto.toFixed(1) + "s";
+      const seg = bruto - atraso;
+      // preenche/recolhe palavra a palavra conforme o tempo avança ou recua
+      while (k < palavras.length && palavras[k].t <= seg) {
+        palavras[k].el.classList.add("cantada");
+        k++;
+      }
+      while (k > 0 && palavras[k - 1].t > seg) {
+        k--;
+        palavras[k].el.classList.remove("cantada");
+      }
+      const linhaAtiva = k > 0 ? palavras[k - 1].linha : -1;
+      if (linhaAtiva !== idxAtual) {
+        if (idxAtual >= 0 && divs[idxAtual]) divs[idxAtual].classList.remove("ativa");
+        if (linhaAtiva >= 0 && divs[linhaAtiva]) {
+          divs[linhaAtiva].classList.add("ativa");
+          divs[linhaAtiva].scrollIntoView({ block: "center", behavior: "smooth" });
         }
-        idxAtual = idx;
+        idxAtual = linhaAtiva;
       }
       requestAnimationFrame(tick);
     }
