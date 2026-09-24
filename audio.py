@@ -38,9 +38,9 @@ def _opcoes_ydl(pasta: str) -> dict:
 
 # Marcadores comuns de título do YouTube que não fazem parte do nome da música.
 _LIXO_TITULO = re.compile(
-    r"\s*[\(\[]\s*(?:official|lyric|lyrics|audio|video|music|clipe|v[ií]deo|"
-    r"visualizer|hd|4k|mv|ao vivo|live|legendado|karaok|playback|instrumental|cover)"
-    r"[^\)\]]*[\)\]]",
+    r"\s*[\(\[][^\)\]]*(?:official|lyric|lyrics|audio|video|music|clipe|v[ií]deo|"
+    r"visualizer|hd|4k|mv|ao vivo|live|legendado|karaok|playback|instrumental|cover|"
+    r"vers[ãa]o|versi[óo]n)[^\)\]]*[\)\]]",
     re.IGNORECASE,
 )
 _EH_KARAOKE = re.compile(r"karaok|playback|instrumental", re.IGNORECASE)
@@ -64,10 +64,12 @@ def _parsear_artista_titulo(info: dict) -> tuple[str, str]:
         return artista, _limpar_titulo(faixa)
 
     titulo_bruto = (info.get("title") or "").strip()
-    eh_karaoke = bool(_EH_KARAOKE.search(titulo_bruto))
+    titulo_bruto = titulo_bruto.split("|", 1)[0].strip()  # descarta texto promocional
     if " - " in titulo_bruto:
         esq, dir_ = (p.strip() for p in titulo_bruto.split(" - ", 1))
-        if eh_karaoke:  # "Música (Karaokê) - Artista"
+        # O marcador de karaokê fica junto da MÚSICA. Só é "Música - Artista"
+        # (invertido) quando o marcador está na ESQUERDA; senão é o usual.
+        if _EH_KARAOKE.search(esq) and not _EH_KARAOKE.search(dir_):
             return _limpar_titulo(dir_), _limpar_titulo(esq)
         return _limpar_titulo(esq), _limpar_titulo(dir_)
 

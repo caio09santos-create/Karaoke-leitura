@@ -12,7 +12,7 @@ _TEMPO_LRC = r"\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]"
 
 
 def _buscar_dados(artista: str, titulo: str) -> dict | None:
-    """Retorna o primeiro registro do LRCLIB com letra utilizável, ou None."""
+    """Retorna o melhor registro do LRCLIB com letra, preferindo a sincronizada."""
     try:
         # 1ª tentativa: busca exata por artista + título
         resposta = requests.get(
@@ -21,12 +21,11 @@ def _buscar_dados(artista: str, titulo: str) -> dict | None:
             headers=HEADERS,
             timeout=10,
         )
-        if resposta.status_code == 200:
-            dados = resposta.json()
-            if _tem_letra(dados):
-                return dados
+        exato = resposta.json() if resposta.status_code == 200 else None
+        if exato and _tem_letra(exato) and exato.get("syncedLyrics"):
+            return exato  # match exato já com letra sincronizada
 
-        # 2ª tentativa: busca livre
+        # 2ª tentativa: busca livre (a ordem de artista/título não importa aqui)
         resposta = requests.get(
             f"{LRCLIB_URL}/search",
             params={"q": f"{artista} {titulo}"},
@@ -34,12 +33,19 @@ def _buscar_dados(artista: str, titulo: str) -> dict | None:
             timeout=10,
         )
         resposta.raise_for_status()
-        for item in resposta.json():
-            if _tem_letra(item):
-                return item
+        resultados = resposta.json()
+        if not isinstance(resultados, list):
+            resultados = []
     except requests.RequestException:
         return None
-    return None
+
+    com_sync = [x for x in resultados if _tem_letra(x) and x.get("syncedLyrics")]
+    if com_sync:
+        return com_sync[0]
+    if exato and _tem_letra(exato):
+        return exato
+    com_letra = [x for x in resultados if _tem_letra(x)]
+    return com_letra[0] if com_letra else None
 
 
 def buscar_letra(artista: str, titulo: str) -> str | None:
@@ -49,9 +55,11 @@ def buscar_letra(artista: str, titulo: str) -> str | None:
 
 
 def buscar_letra_sincronizada(artista: str, titulo: str) -> dict | None:
-    """Retorna {"plain": str, "synced": [(tempo_seg, texto), ...] | None} ou None.
+    """Retorna {"plain", "synced", "artista", "titulo"} do LRCLIB, ou None.
 
-    `synced` só vem preenchido quando o LRCLIB tem letra com marcação de tempo.
+    `artista`/`titulo` vêm do registro do LRCLIB (nomes canônicos), o que corrige
+    palpites trocados a partir do título do vídeo. `synced` só vem quando há
+    marcação de tempo.
     """
     dados = _buscar_dados(artista, titulo)
     if not dados:
@@ -61,7 +69,12 @@ def buscar_letra_sincronizada(artista: str, titulo: str) -> dict | None:
         return None
     synced_raw = None if dados.get("instrumental") else dados.get("syncedLyrics")
     synced = parse_lrc(synced_raw) if synced_raw else None
-    return {"plain": plain, "synced": synced or None}
+    return {
+        "plain": plain,
+        "synced": synced or None,
+        "artista": (dados.get("artistName") or artista or "").strip(),
+        "titulo": (dados.get("trackName") or titulo or "").strip(),
+    }
 
 
 def _tem_letra(dados: dict) -> bool:

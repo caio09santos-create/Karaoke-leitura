@@ -108,9 +108,17 @@ class TestParsearArtistaTitulo:
         info = {"title": "Bohemian Rhapsody", "channel": "QueenOfficial"}
         assert _parsear_artista_titulo(info) == ("QueenOfficial", "Bohemian Rhapsody")
 
-    def test_karaoke_inverte_musica_e_artista(self):
+    def test_karaoke_inverte_quando_marcador_esta_na_esquerda(self):
+        # promo após "|" contém "Playback" e não pode confundir a detecção
         info = {
-            "title": "Quem de nós dois (Karaokê) - Ana Carolina | Solte a voz!",
+            "title": "Quem de nós dois (Karaokê) - Ana Carolina | Solte a voz com Playback!",
             "uploader": "LiveSing Karaokê",
         }
         assert _parsear_artista_titulo(info) == ("Ana Carolina", "Quem de nós dois")
+
+    def test_karaoke_na_direita_mantem_ordem_normal(self):
+        info = {
+            "title": "Alejandro Sanz - No Me Compares (Versión Karaoke)",
+            "uploader": "PARTY TYME KARAOKE EN ESPAÑOL",
+        }
+        assert _parsear_artista_titulo(info) == ("Alejandro Sanz", "No Me Compares")

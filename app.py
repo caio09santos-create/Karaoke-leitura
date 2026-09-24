@@ -66,6 +66,8 @@ def acao_buscar_letra():
     if dados:
         st.session_state["letra"] = dados["plain"]
         st.session_state["synced"] = dados["synced"]
+        st.session_state["artista"] = dados.get("artista") or artista
+        st.session_state["titulo"] = dados.get("titulo") or titulo
         st.session_state["aviso"] = None
     else:
         st.session_state["synced"] = None
@@ -218,6 +220,9 @@ if url and url != st.session_state.get("url_processada"):
             if dados:
                 st.session_state["letra"] = dados["plain"]
                 st.session_state["synced"] = dados["synced"]
+                # nomes canônicos do LRCLIB corrigem palpites trocados do título
+                st.session_state["artista"] = dados.get("artista") or meta["artista"]
+                st.session_state["titulo"] = dados.get("titulo") or meta["titulo"]
             else:
                 st.info("Letra não encontrada automaticamente — ajuste os campos e busque abaixo.")
 

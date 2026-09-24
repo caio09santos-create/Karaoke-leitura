@@ -86,22 +86,48 @@ def _get_search(get_resp, search_resp):
 
 
 class TestBuscarLetraSincronizada:
-    def test_com_synced_retorna_plain_e_tempos(self, monkeypatch):
-        get_resp = _FakeResp(200, {"syncedLyrics": "[00:01.00]a\n[00:02.00]b"})
-        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, None))
-        dados = buscar_letra_sincronizada("Artista", "Titulo")
-        assert dados == {"plain": "a\nb", "synced": [(1.0, "a"), (2.0, "b")]}
+    def test_synced_com_nomes_canonicos(self, monkeypatch):
+        get_resp = _FakeResp(
+            200,
+            {
+                "syncedLyrics": "[00:01.00]a\n[00:02.00]b",
+                "artistName": "Artista Real",
+                "trackName": "Faixa Real",
+            },
+        )
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, _FakeResp(200, [])))
+        dados = buscar_letra_sincronizada("chute", "trocado")
+        assert dados == {
+            "plain": "a\nb",
+            "synced": [(1.0, "a"), (2.0, "b")],
+            "artista": "Artista Real",
+            "titulo": "Faixa Real",
+        }
 
-    def test_so_plain_deixa_synced_none(self, monkeypatch):
+    def test_so_plain_usa_termos_passados_como_fallback(self, monkeypatch):
         get_resp = _FakeResp(200, {"plainLyrics": "a\nb"})
-        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, None))
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, _FakeResp(200, [])))
         dados = buscar_letra_sincronizada("Artista", "Titulo")
-        assert dados == {"plain": "a\nb", "synced": None}
+        assert dados == {"plain": "a\nb", "synced": None, "artista": "Artista", "titulo": "Titulo"}
+
+    def test_prefere_resultado_com_sincronizada(self, monkeypatch):
+        # /get sem letra; a busca traz um só-plain e um sincronizado -> escolhe o sincronizado
+        get_resp = _FakeResp(404, None)
+        search_resp = _FakeResp(
+            200,
+            [
+                {"plainLyrics": "x", "artistName": "P", "trackName": "Q"},
+                {"syncedLyrics": "[00:03.00]c", "artistName": "S", "trackName": "T"},
+            ],
+        )
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, search_resp))
+        dados = buscar_letra_sincronizada("a", "b")
+        assert dados["synced"] == [(3.0, "c")]
+        assert (dados["artista"], dados["titulo"]) == ("S", "T")
 
     def test_instrumental_sem_resultado_retorna_none(self, monkeypatch):
         get_resp = _FakeResp(200, {"instrumental": True})
-        search_resp = _FakeResp(200, [])
-        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, search_resp))
+        monkeypatch.setattr(letras.requests, "get", _get_search(get_resp, _FakeResp(200, [])))
         assert buscar_letra_sincronizada("Artista", "Titulo") is None
 
     def test_erro_de_rede_retorna_none(self, monkeypatch):
