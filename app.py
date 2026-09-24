@@ -12,9 +12,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
-from audio import baixar_audio, extrair_metadados
+from audio import baixar_audio, extrair_metadados, youtube_id
 from avaliacao import avaliar, normalizar_palavra
-from gravador import gravar_cantando
+from gravador import gravar_cantando, gravar_com_video
 from letras import buscar_letra_sincronizada
 from player import construir_player_sincronizado
 
@@ -259,21 +259,38 @@ elif synced_atual:
 
 # 3. Gravação
 st.subheader("3. Cante!")
-usar_gravador = bool(synced_atual and audio_musica)
-gravacao = None
-if usar_gravador:
-    st.caption(
-        "Toque a base e clique **🎯 Alinhar 1ª linha** quando a 1ª linha começar (afine com "
-        "−/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
-        "terminar. Use fones de ouvido."
-    )
-    # key por música: troca de link remonta o componente com a base/letra novas
-    gravacao = gravar_cantando(
-        synced_atual,
-        audio_data_uri=_data_uri(*audio_musica),
-        key="grav_" + hashlib.sha1(url.encode()).hexdigest()[:8],
-    )
-    audio_bytes = gravacao[0] if gravacao else None
+audio_bytes = None
+vid = youtube_id(url) if url else None
+chave_musica = hashlib.sha1(url.encode()).hexdigest()[:8] if url else "x"
+modo_base_ok = bool(synced_atual and audio_musica)  # tocar a base aqui + realce
+
+if modo_base_ok or vid:
+    opcoes = []
+    if modo_base_ok:
+        opcoes.append("🎧 Tocar a base aqui e acompanhar a letra")
+    if vid:
+        opcoes.append("🎬 Cantar com o vídeo do YouTube")
+    modo = st.radio("Como você quer cantar?", opcoes, horizontal=True)
+
+    if modo.startswith("🎬"):
+        st.caption(
+            "Clique **🎤 Preparar microfone**, dê **play no vídeo** (a letra aparece nele) e "
+            "cante. Ao **pausar ou terminar** o vídeo, a nota é calculada. Use fones de ouvido "
+            "e, de preferência, um vídeo karaokê/instrumental."
+        )
+        gravacao = gravar_com_video(vid, key="ytg_" + chave_musica)
+        audio_bytes = gravacao[0] if gravacao else None
+    else:
+        st.caption(
+            "Toque a base e clique **🎯 Alinhar 1ª linha** quando a 1ª linha começar (afine com "
+            "−/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
+            "terminar. Use fones de ouvido."
+        )
+        # key por música: troca de link remonta o componente com a base/letra novas
+        gravacao = gravar_cantando(
+            synced_atual, audio_data_uri=_data_uri(*audio_musica), key="grav_" + chave_musica
+        )
+        audio_bytes = gravacao[0] if gravacao else None
 else:
     st.info(
         "Use fones de ouvido: se o microfone captar a música, "

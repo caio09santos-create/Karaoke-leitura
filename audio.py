@@ -9,6 +9,7 @@ import glob
 import os
 import re
 import tempfile
+from urllib.parse import parse_qs, urlparse
 
 _MIMETYPES = {
     "m4a": "audio/mp4",
@@ -18,6 +19,21 @@ _MIMETYPES = {
     "ogg": "audio/ogg",
     "mp3": "audio/mpeg",
 }
+
+
+def youtube_id(url: str) -> str | None:
+    """Extrai o ID do vídeo de uma URL do YouTube (youtu.be, watch, shorts...)."""
+    u = urlparse(url)
+    host = (u.hostname or "").lower()
+    if host == "youtu.be":
+        return u.path.lstrip("/").split("/")[0] or None
+    if "youtube" in host:
+        if u.path == "/watch":
+            return parse_qs(u.query).get("v", [None])[0]
+        if u.path.startswith(("/embed/", "/shorts/", "/live/", "/v/")):
+            partes = u.path.split("/")
+            return partes[2] if len(partes) > 2 else None
+    return None
 
 
 def _mimetype_por_ext(ext: str) -> str:

@@ -7,7 +7,19 @@ from audio import (
     _opcoes_ydl,
     _parsear_artista_titulo,
     baixar_audio,
+    youtube_id,
 )
+
+
+class TestYoutubeId:
+    def test_formatos_comuns(self):
+        assert youtube_id("https://youtu.be/IK9nIaQIvkk?si=abc") == "IK9nIaQIvkk"
+        assert youtube_id("https://www.youtube.com/watch?v=nK4i3wqZpIw&t=3s") == "nK4i3wqZpIw"
+        assert youtube_id("https://youtube.com/shorts/AbC123?x=1") == "AbC123"
+
+    def test_url_invalida(self):
+        assert youtube_id("https://exemplo.com/x") is None
+        assert youtube_id("") is None
 
 
 class TestMimetype:

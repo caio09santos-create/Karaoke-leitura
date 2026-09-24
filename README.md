@@ -16,6 +16,11 @@ Como o áudio do YouTube costuma ser uma versão/edição diferente da referênc
 um botão **🎯 Alinhar 1ª linha**: toque a base e clique quando a primeira linha começar — o
 atraso é calculado automaticamente (com ajuste fino −/+), em vez de tentativa e erro.
 
+No passo 3 dá para escolher entre dois modos: **tocar a base aqui** (com realce da letra) ou
+**cantar com o vídeo do YouTube** (a letra aparece no próprio vídeo). No modo vídeo, você
+prepara o microfone, dá play, e ao pausar ou terminar o vídeo a nota é calculada — a gravação
+acontece por baixo dos panos.
+
 ## Estrutura
 
 | Arquivo | Responsabilidade |
@@ -26,6 +31,7 @@ atraso é calculado automaticamente (com ajuste fino −/+), em vez de tentativa
 | `audio.py` | Download do áudio do link (yt-dlp), em formato tocável no navegador |
 | `player.py` | Prompter de karaokê (HTML/JS) que destaca a linha atual ao vivo |
 | `gravador.py` + `karaoke_rec/` | Componente que toca a base e grava o microfone em um clique |
+| `karaoke_yt/` | Componente que grava o microfone junto com o vídeo do YouTube |
 | `tests/` | Testes unitários (pytest) |
 
 > O download de áudio do YouTube é para uso pessoal/estudo. Não é necessário `ffmpeg`

@@ -7,17 +7,19 @@ poderem ser importados/testados sem o streamlit instalado (ex.: no CI).
 import base64
 import os
 
-_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "karaoke_rec")
-_componente = None
+_BASE = os.path.dirname(os.path.abspath(__file__))
+_componentes: dict[str, object] = {}
 
 
-def _get_componente():
-    global _componente
-    if _componente is None:
+def _get_componente(nome: str):
+    """Declara (uma vez) o componente cujos arquivos estão em ./<nome>/."""
+    if nome not in _componentes:
         import streamlit.components.v1 as components
 
-        _componente = components.declare_component("karaoke_rec", path=_DIR)
-    return _componente
+        _componentes[nome] = components.declare_component(
+            nome, path=os.path.join(_BASE, nome)
+        )
+    return _componentes[nome]
 
 
 def gravar_cantando(
@@ -26,14 +28,20 @@ def gravar_cantando(
     atraso: float = 0.0,
     key: str = "karaoke_rec",
 ) -> tuple[bytes, str] | None:
-    """Renderiza o componente e retorna (bytes, mimetype) da gravação, ou None."""
-    valor = _get_componente()(
+    """Toca a base + grava o microfone (com realce da letra). (bytes, mime) ou None."""
+    valor = _get_componente("karaoke_rec")(
         synced=[[float(t), str(texto)] for t, texto in synced],
         audio=audio_data_uri,
         atraso=float(atraso),
         key=key,
         default=None,
     )
+    return _decode_gravacao(valor)
+
+
+def gravar_com_video(video_id: str, key: str = "karaoke_yt") -> tuple[bytes, str] | None:
+    """Grava o microfone enquanto o vídeo do YouTube toca. (bytes, mime) ou None."""
+    valor = _get_componente("karaoke_yt")(video_id=video_id, key=key, default=None)
     return _decode_gravacao(valor)
 
 
