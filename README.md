@@ -12,6 +12,10 @@ letra **sincronizada**, um único **▶ Iniciar** toca a base e grava o microfon
 tempo, com a linha atual destacada seguindo a faixa; sem áudio, há um relógio manual (▶)
 com ajuste de "atraso".
 
+Como o áudio do YouTube costuma ser uma versão/edição diferente da referência da letra, há
+um botão **🎯 Alinhar 1ª linha**: toque a base e clique quando a primeira linha começar — o
+atraso é calculado automaticamente (com ajuste fino −/+), em vez de tentativa e erro.
+
 ## Estrutura
 
 | Arquivo | Responsabilidade |

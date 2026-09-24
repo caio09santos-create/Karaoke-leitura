@@ -252,8 +252,9 @@ usar_gravador = bool(synced_atual and audio_musica)
 gravacao = None
 if usar_gravador:
     st.caption(
-        "Clique **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao terminar. "
-        "Use fones de ouvido."
+        "Toque a base e clique **🎯 Alinhar 1ª linha** quando a 1ª linha começar (afine com "
+        "−/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
+        "terminar. Use fones de ouvido."
     )
     gravacao = gravar_cantando(
         synced_atual, audio_data_uri=_data_uri(*audio_musica), key="grav_karaoke"
