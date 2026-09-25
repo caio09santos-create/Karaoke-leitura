@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    #barra { display: flex; align-items: center; gap: 10px; padding: 6px 4px; flex-wrap: wrap; }
+    #btn {
+      font-size: 15px; font-weight: 600; padding: 8px 16px; cursor: pointer;
+      border: none; border-radius: 8px; background: #d63333; color: #fff;
+    }
+    #btn.gravando { background: #333; }
+    #btn:disabled { opacity: .5; cursor: default; }
+    #tempo { font-variant-numeric: tabular-nums; color: #555; min-width: 46px; }
+    #atraso { width: 64px; }
+    label { font-size: 12px; color: #666; }
+    #status { font-size: 12px; color: #888; }
+    #erro { color: #d63333; font-size: 13px; padding: 4px; }
+    audio { width: 100%; margin: 4px 0; }
+    #letras { height: 280px; overflow-y: auto; padding: 8px 4px; }
+    .linha {
+      padding: 4px 6px; color: #9aa0a6; font-size: 16px; line-height: 1.5;
+      transition: color .15s, transform .15s;
+    }
+    .linha.ativa {
+      font-size: 18px; transform: scale(1.01); transform-origin: left center;
+    }
+    .palavra { color: #9aa0a6; transition: color .12s; }
+    .palavra.cantada { color: #1e9e4a; font-weight: 700; }
+    #contagem {
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      font-size: 88px; font-weight: 800; color: #d63333;
+      background: rgba(255, 255, 255, 0.88);
+    }
+    #contagem.on { display: flex; }
+    #barra2 {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 4px 6px; flex-wrap: wrap;
+    }
+    #barra2 button {
+      font-size: 13px; padding: 4px 10px; cursor: pointer;
+      border: 1px solid #ccc; border-radius: 6px; background: #fff;
+    }
+    #dica { font-size: 12px; color: #888; }
+  </style>
+</head>
+<body>
+  <div id="barra">
+    <button id="btn" type="button">▶ Iniciar (tocar + gravar)</button>
+    <span id="tempo">0.0s</span>
+    <label>atraso (s): <input id="atraso" type="number" step="0.5" value="0"></label>
+    <span id="status"></span>
+  </div>
+  <div id="barra2">
+    <button id="alinhar" type="button">🎯 Alinhar 1ª linha</button>
+    <button id="menos" type="button">−0,2s</button>
+    <button id="mais" type="button">+0,2s</button>
+    <span id="dica">toque a base e clique 🎯 quando a 1ª linha começar</span>
+  </div>
+  <div id="erro"></div>
+  <div id="contagem"></div>
+  <audio id="audio" controls></audio>
+  <div id="letras"></div>
+
+  <script>
+    // ---- Protocolo v1 de componente do Streamlit (implementado à mão) ----
+    function post(msg) {
+      msg.isStreamlitMessage = true;
+      window.parent.postMessage(msg, "*");
+    }
+    const Streamlit = {
+      ready() { post({ type: "streamlit:componentReady", apiVersion: 1 }); },
+      setHeight(h) { post({ type: "streamlit:setFrameHeight", height: h }); },
+      setValue(v) { post({ type: "streamlit:setComponentValue", dataType: "json", value: v }); },
+    };
+
+    // ---- Estado ----
+    let LINHAS = [];
+    let atraso = 0;
+    let idxAtual = -1;
+    let gravando = false;
+    let montado = false;
+    let t0 = 0;                 // início da gravação (performance.now)
+    let mediaRecorder = null;
+    let chunks = [];
+    let stream = null;
+
+    const elBtn = document.getElementById("btn");
+    const elTempo = document.getElementById("tempo");
+    const elAtraso = document.getElementById("atraso");
+    const elStatus = document.getElementById("status");
+    const elErro = document.getElementById("erro");
+    const elContagem = document.getElementById("contagem");
+    const elAudio = document.getElementById("audio");
+    const elLetras = document.getElementById("letras");
+    const elAlinhar = document.getElementById("alinhar");
+    const elMenos = document.getElementById("menos");
+    const elMais = document.getElementById("mais");
+    let divs = [];
+    let palavras = [];   // {el, t, linha} de cada palavra, em ordem de tempo
+    let k = 0;           // quantas palavras já foram "cantadas"
+
+    function setAtraso(v) {
+      atraso = Math.round(v * 100) / 100;
+      elAtraso.value = atraso;  // o tick recomputa o realce a partir do novo atraso
+    }
+
+    elAtraso.addEventListener("change", () => setAtraso(parseFloat(elAtraso.value) || 0));
+    elBtn.addEventListener("click", () => { gravando ? parar() : iniciar(); });
+    elAudio.addEventListener("ended", () => { if (gravando) parar(); });  // fim da base -> para
+    elAlinhar.addEventListener("click", () => {
+      if (!LINHAS.length) return;
+      setAtraso(elAudio.currentTime - LINHAS[0][0]);  // 1º toque: corrige o offset
+      elStatus.textContent = "🎯 alinhado (atraso " + atraso.toFixed(2) + "s)";
+    });
+    elMenos.addEventListener("click", () => setAtraso(atraso - 0.2));
+    elMais.addEventListener("click", () => setAtraso(atraso + 0.2));
+
+    function onRender(args) {
+      if (montado) return;               // monta uma única vez (não reseta em reruns)
+      montado = true;
+      LINHAS = (args && args.synced) || [];
+      atraso = (args && args.atraso) || 0;
+      elAtraso.value = atraso;
+      if (args && args.audio) {
+        elAudio.src = args.audio;
+      } else {
+        elAudio.style.display = "none";
+      }
+      palavras = [];
+      divs = [];
+      LINHAS.forEach(([t, txt], i) => {
+        // janela da linha: do seu início até o início da próxima (ou +4s na última)
+        const fim = (i + 1 < LINHAS.length) ? LINHAS[i + 1][0] : t + 4;
+        const tokens = txt.split(/\s+/).filter(Boolean);
+        const totalCh = tokens.reduce((a, w) => a + w.length, 0) || 1;
+        const d = document.createElement("div");
+        d.className = "linha";
+        let acc = 0;
+        tokens.forEach((w) => {
+          const span = document.createElement("span");
+          span.className = "palavra";
+          span.textContent = w + " ";
+          span.dataset.t = t + (acc / totalCh) * (fim - t);  // tempo interpolado
+          palavras.push({ el: span, t: parseFloat(span.dataset.t), linha: i });
+          d.appendChild(span);
+          acc += w.length;
+        });
+        elLetras.appendChild(d);
+        divs.push(d);
+      });
+      Streamlit.setHeight(460);
+      requestAnimationFrame(tick);
+    }
+
+    async function iniciar() {
+      elErro.textContent = "";
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (e) {
+        elErro.textContent = "Não foi possível acessar o microfone. Permita o acesso e tente de novo.";
+        return;
+      }
+      elBtn.disabled = true;
+      elStatus.textContent = "preparando…";
+      await contar(3);
+      chunks = [];
+      try {
+        mediaRecorder = new MediaRecorder(stream);
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      }
+      mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      mediaRecorder.onstop = enviarGravacao;
+      mediaRecorder.start();
+      t0 = performance.now();
+      resetRealce();  // reseta destaque da take anterior
+      elLetras.scrollTop = 0;
+      if (elAudio.src) { try { elAudio.currentTime = 0; await elAudio.play(); } catch (e) {} }
+      gravando = true;
+      elBtn.disabled = false;
+      elBtn.textContent = "⏹ Parar";
+      elBtn.classList.add("gravando");
+      elStatus.textContent = "🔴 gravando…";
+    }
+
+    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    async function contar(n) {
+      elContagem.classList.add("on");
+      for (let i = n; i >= 1; i--) { elContagem.textContent = i; await sleep(750); }
+      elContagem.textContent = "🎤";
+      await sleep(400);
+      elContagem.classList.remove("on");
+    }
+
+    function parar() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+      if (elAudio.src) elAudio.pause();
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      gravando = false;
+      elBtn.textContent = "▶ Iniciar (tocar + gravar)";
+      elBtn.classList.remove("gravando");
+      elBtn.disabled = true;
+      elStatus.textContent = "processando…";
+    }
+
+    function enviarGravacao() {
+      const mime = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
+      const blob = new Blob(chunks, { type: mime });
+      const dur = (performance.now() - t0) / 1000;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const b64 = String(reader.result).split(",")[1] || "";
+        Streamlit.setValue({ audio_b64: b64, mime: blob.type, duracao_s: dur });
+        elStatus.textContent = "✅ gravação enviada — clique em Calcular nota";
+        elBtn.disabled = false;
+      };
+      reader.readAsDataURL(blob);
+    }
+
+    function tempoAtual() {
+      if (elAudio.src && !elAudio.paused) return elAudio.currentTime;
+      if (gravando) return (performance.now() - t0) / 1000;
+      return elAudio.src ? elAudio.currentTime : 0;
+    }
+
+    function resetRealce() {
+      k = 0;
+      idxAtual = -1;
+      palavras.forEach((p) => p.el.classList.remove("cantada"));
+      divs.forEach((d) => d.classList.remove("ativa"));
+    }
+
+    function tick() {
+      const bruto = tempoAtual();
+      elTempo.textContent = bruto.toFixed(1) + "s";
+      const seg = bruto - atraso;
+      // preenche/recolhe palavra a palavra conforme o tempo avança ou recua
+      while (k < palavras.length && palavras[k].t <= seg) {
+        palavras[k].el.classList.add("cantada");
+        k++;
+      }
+      while (k > 0 && palavras[k - 1].t > seg) {
+        k--;
+        palavras[k].el.classList.remove("cantada");
+      }
+      const linhaAtiva = k > 0 ? palavras[k - 1].linha : -1;
+      if (linhaAtiva !== idxAtual) {
+        if (idxAtual >= 0 && divs[idxAtual]) divs[idxAtual].classList.remove("ativa");
+        if (linhaAtiva >= 0 && divs[linhaAtiva]) {
+          divs[linhaAtiva].classList.add("ativa");
+          divs[linhaAtiva].scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+        idxAtual = linhaAtiva;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    window.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "streamlit:render") onRender(e.data.args || {});
+    });
+    Streamlit.ready();
+  </script>
+</body>
+</html>

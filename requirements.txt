@@ -1,0 +1,6 @@
+# Dependências de runtime do app
+streamlit>=1.37
+faster-whisper>=1.0
+rapidfuzz>=3.9
+requests>=2.32
+yt-dlp>=2024.8
