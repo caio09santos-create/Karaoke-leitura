@@ -9,6 +9,36 @@ import html
 import io
 
 import streamlit as st
+from youtube_search import YoutubeSearch
+
+if st.session_state.get('url1', '') != "":
+    st.session_state['url1'] = ""   
+    url1 = st.session_state['url1']  # Inicializa a variável url1 com o valor do estado
+
+# 1. Cria a barra de pesquisa na interface
+termo_busca = st.text_input("O que você quer cantar hoje?", placeholder="Digite o nome da música ou artista...")
+
+# 2. Verifica se o usuário digitou algo
+if termo_busca:
+    # Executa a busca no YouTube (o parâmetro max_results define quantos vídeos retornam)
+    resultados = YoutubeSearch(termo_busca, max_results=5).to_dict()
+    
+    if resultados:
+        st.subheader("Resultados encontrados:")
+        
+        # 3. Exibe os resultados para o usuário
+        for video in resultados:
+            titulo = video['title']
+            link_video = f"https://youtube.com{video['url_suffix']}"
+            duracao = video['duration']
+            canal = video['channel']
+            
+            # Mostra o título como um link clicável e informações do vídeo
+            st.markdown(f"*[{titulo}]({link_video})*")
+            st.write(f"Canal: {canal} | Duração: {duracao}")
+            st.write("---")
+    else:
+        st.warning("Nenhum vídeo encontrado para essa busca.")
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
@@ -17,6 +47,7 @@ from avaliacao import avaliar, normalizar_palavra
 from gravador import gravar_cantando, gravar_com_video
 from letras import buscar_letra_sincronizada
 from player import construir_player_sincronizado
+from youtube_search import YoutubeSearch
 
 st.set_page_config(page_title="Karaokê - Nota de Leitura", page_icon="🎤")
 
@@ -191,11 +222,104 @@ with st.sidebar:
 
 # 1. Música
 st.subheader("1. Escolha a música")
-url = st.text_input("Link do YouTube (de preferência uma versão karaokê/instrumental)")
-if url:
-    st.video(url)
-if url and url != st.session_state.get("url_processada"):
-    st.session_state["url_processada"] = url
+# 1. GARANTE QUE A VARIÁVEL EXISTE LOGO NO INÍCIO (Evita o NameError)
+if 'url1' not in st.session_state:
+    st.session_state['url1'] = ""
+url1 = st.session_state['url1']  # Inicializa a variável url1 com o valor do estado
+
+# 2. Barra para digitar o termo de busca por texto
+termo_busca = st.text_input("Pesquise a música ou artista (de preferência uma versão karaokê/instrumental)", placeholder="Ex: Slipknot Unsainted karaoke")
+
+# 3. Executa a busca se houver texto digitado
+if termo_busca:
+    resultados = YoutubeSearch(termo_busca, max_results=5).to_dict()
+    
+    if resultados:
+        # Monta um dicionário mapeando "Título do Vídeo" -> "URL do YouTube"
+        opcoes_videos = {"-- Selecione uma música --": ""}
+        for video in resultados:
+            label = f"🎵 {video['title']} ({video['duration']})"
+            opcoes_videos[label] = f"https://youtube.com{video['id']}"
+                  
+        # Cria uma caixa de seleção com os títulos encontrados
+        selecao = st.selectbox("Selecione a versão desejada abaixo:", list(opcoes_videos.keys()))
+        if selecao and opcoes_videos[selecao] != "":
+                    st.session_state['url1'] = opcoes_videos[selecao]  # Atualiza a variável de estado com a URL selecionada
+                    # Define a url1 com base na escolha da lista
+                    url1 = opcoes_videos[selecao]
+    else:
+        st.warning("Nenhum vídeo encontrado para esta busca.")
+url_final = st.session_state.get('url1', '')
+
+# 4. SÓ EXECUTA O RESTANTE DO SEU CÓDIGO SE O USUÁRIO TIVER ESCOLHIDO UMA MÚSICA
+if url1 != "":
+    st.video(url1)
+
+    url1 = url_final  # Atualiza a variável url1 com o valor final do estado
+    
+    if url1 and url1 != st.session_state.get("url1_processada"):
+        st.session_state["url1_processada"] = url1
+        # limpa o estado do link anterior (evita letra/áudio/nota "grudados")
+        for _k in ("artista", "titulo", "letra"):
+            st.session_state[_k] = ""
+        st.session_state["synced"] = None
+        st.session_state["audio_musica"] = None
+        for _k in ("chave_transcricao", "transcricao", "tempos", "idioma_det"):
+            st.session_state.pop(_k, None)
+        with st.spinner("Carregando o vídeo: áudio, artista/título e letra..."):
+            meta = carregar_metadados(url1)
+            if meta:
+                st.session_state["artista"] = meta["artista"]
+                st.session_state["titulo"] = meta["titulo"]
+            else:
+                st.info("Não consegui ler artista/título do vídeo — preencha abaixo.")
+
+            st.session_state["audio_musica"] = carregar_audio(url1)
+            if not st.session_state["audio_musica"]:
+                st.warning("Não consegui baixar o áudio (letra e nota continuam funcionando).")
+
+            if meta:
+                dados = buscar_letra_cache(meta["artista"], meta["titulo"])
+                if dados:
+                    st.session_state["letra"] = dados["plain"]
+                    st.session_state["synced"] = dados["synced"]
+                    # nomes canônicos do LRCLIB corrigem palpites trocados do título
+link_atual = st.session_state.get('url1', '')
+if link_atual != "":
+    st.video(link_atual)
+    if link_atual and link_atual != st.session_state.get("url1_processada"):
+        st.session_state["url1_processada"] = link_atual
+        # limpa o estado do link anterior (evita letra/áudio/nota "grudados")
+        for _k in ("artista", "titulo", "letra"):
+            st.session_state[_k] = ""
+        st.session_state["synced"] = None
+        st.session_state["audio_musica"] = None
+        for _k in ("chave_transcricao", "transcricao", "tempos", "idioma_det"):
+            st.session_state.pop(_k, None)
+        with st.spinner("Carregando o vídeo: áudio, artista/título e letra..."):
+            meta = carregar_metadados(link_atual)
+            if meta:
+                st.session_state["artista"] = meta["artista"]
+                st.session_state["titulo"] = meta["titulo"]
+            else:
+                st.info("Não consegui ler artista/título do vídeo — preencha abaixo.")
+
+            st.session_state["audio_musica"] = carregar_audio(link_atual)
+            if not st.session_state["audio_musica"]:
+                st.warning("Não consegui baixar o áudio (letra e nota continuam funcionando).")
+
+            if meta:
+                dados = buscar_letra_cache(meta["artista"], meta["titulo"])
+                if dados:
+                    st.session_state["letra"] = dados["plain"]
+                    st.session_state["synced"] = dados["synced"]
+                    # nomes canônicos do LRCLIB corrigem palpites trocados do título
+                    st.session_state["artista"] = dados.get("artista") or meta["artista"]
+                    st.session_state["titulo"] = dados.get("titulo") or meta["titulo"]
+                else:
+                    st.info("Letra não encontrada automaticamente — ajuste os campos e busque abaixo.")
+if link_atual and link_atual != st.session_state.get("url1_processada"):
+    st.session_state["url1_processada"] = link_atual
     # limpa o estado do link anterior (evita letra/áudio/nota "grudados")
     for _k in ("artista", "titulo", "letra"):
         st.session_state[_k] = ""
@@ -204,14 +328,14 @@ if url and url != st.session_state.get("url_processada"):
     for _k in ("chave_transcricao", "transcricao", "tempos", "idioma_det"):
         st.session_state.pop(_k, None)
     with st.spinner("Carregando o vídeo: áudio, artista/título e letra..."):
-        meta = carregar_metadados(url)
+        meta = carregar_metadados(link_atual)
         if meta:
             st.session_state["artista"] = meta["artista"]
             st.session_state["titulo"] = meta["titulo"]
         else:
             st.info("Não consegui ler artista/título do vídeo — preencha abaixo.")
 
-        st.session_state["audio_musica"] = carregar_audio(url)
+        st.session_state["audio_musica"] = carregar_audio(url1)
         if not st.session_state["audio_musica"]:
             st.warning("Não consegui baixar o áudio (letra e nota continuam funcionando).")
 
@@ -260,8 +384,8 @@ elif synced_atual:
 # 3. Gravação
 st.subheader("3. Cante!")
 audio_bytes = None
-vid = youtube_id(url) if url else None
-chave_musica = hashlib.sha1(url.encode()).hexdigest()[:8] if url else "x"
+vid = youtube_id(link_atual) if ('link_atual' in locals() or 'link_atual' in globals()) and "watch?v=" in link_atual else None
+chave_musica = hashlib.sha1(link_atual.encode()).hexdigest()[:10] if link_atual else "x"
 modo_base_ok = bool(synced_atual and audio_musica)  # tocar a base aqui + realce
 
 if modo_base_ok or vid:
@@ -292,12 +416,12 @@ if modo_base_ok or vid:
         )
         audio_bytes = gravacao[0] if gravacao else None
 else:
-    st.info(
+        st.info(
         "Use fones de ouvido: se o microfone captar a música, "
         "a voz do cantor original conta como sua."
     )
-    audio = st.audio_input("Clique para gravar e clique de novo para parar")
-    audio_bytes = audio.getvalue() if audio else None
+        audio = st.audio_input("Clique para gravar e clique de novo para parar")
+        audio_bytes = audio.getvalue() if audio else None
 
 # 4. Nota (calculada automaticamente quando há gravação)
 st.subheader("4. Resultado")
