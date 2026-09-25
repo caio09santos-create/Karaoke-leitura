@@ -21,13 +21,17 @@ No passo 3 dá para escolher entre dois modos: **tocar a base aqui** (com realce
 prepara o microfone, dá play, e ao pausar ou terminar o vídeo a nota é calculada — a gravação
 acontece por baixo dos panos.
 
+Além da nota de leitura, o resultado mostra uma **nota de afinação** (intonação): quão centrado
+nas notas da escala você cantou. É informativa e não checa se você seguiu a melodia exata.
+
 ## Estrutura
 
 | Arquivo | Responsabilidade |
 |---|---|
 | `app.py` | Interface Streamlit e reconhecimento de voz (faster-whisper) |
 | `letras.py` | Busca de letras na API pública do [LRCLIB](https://lrclib.net) |
-| `avaliacao.py` | Tokenização e cálculo da nota (difflib + rapidfuzz) |
+| `avaliacao.py` | Tokenização e cálculo da nota de leitura (difflib + rapidfuzz) |
+| `afinacao.py` | Nota de afinação (pitch por autocorrelação em numpy; PyAV decodifica) |
 | `audio.py` | Download do áudio do link (yt-dlp), em formato tocável no navegador |
 | `player.py` | Prompter de karaokê (HTML/JS) que destaca a linha atual ao vivo |
 | `gravador.py` + `karaoke_rec/` | Componente que toca a base e grava o microfone em um clique |

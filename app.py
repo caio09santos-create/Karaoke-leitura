@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
+from afinacao import avaliar_afinacao
 from audio import baixar_audio, extrair_metadados, youtube_id
 from avaliacao import avaliar, normalizar_palavra
 from gravador import gravar_cantando, gravar_com_video
@@ -314,18 +315,27 @@ else:
             transcricao, idioma_det, tempos = transcrever(
                 audio_bytes, IDIOMAS[idioma_nome], tamanho_modelo
             )
+            afinacao = avaliar_afinacao(audio_bytes)
         st.session_state["transcricao"] = transcricao
         st.session_state["idioma_det"] = idioma_det
         st.session_state["tempos"] = tempos
+        st.session_state["afinacao"] = afinacao
 
     transcricao = st.session_state.get("transcricao", "")
     if not transcricao.strip():
         st.error("Não consegui ouvir nada. Verifique o microfone e tente de novo.")
     else:
         resultado = avaliar(letra, transcricao, hipotese_tempos=st.session_state.get("tempos"))
-        c1, c2 = st.columns(2)
-        c1.metric("Nota", f"{resultado['nota']}/100")
+        afinacao = st.session_state.get("afinacao")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Nota (leitura)", f"{resultado['nota']}/100")
         c2.metric("Palavras certas", f"{resultado['acertos']} de {resultado['total']}")
+        c3.metric("Afinação", f"{afinacao['nota']}/100" if afinacao else "—")
+        if afinacao:
+            st.caption(
+                "Afinação = quanto você se manteve centrado nas notas (intonação), não se "
+                "cantou a melodia exata. Use fones de ouvido para uma medição melhor."
+            )
 
         if resultado["nota"] >= 90:
             st.success("Show! Você é a estrela da noite! 🌟")
