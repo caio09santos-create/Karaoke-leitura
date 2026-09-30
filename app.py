@@ -114,6 +114,28 @@ def buscar_letra_cache(artista: str, titulo: str) -> dict | None:
     return buscar_letra_sincronizada(artista, titulo)
 
 
+@st.cache_data(show_spinner="Buscando no YouTube...")
+def buscar_youtube(termo: str) -> list[dict]:
+    """Busca vídeos no YouTube (import preguiçoso). Lista de dicts ou [] se indisponível."""
+    try:
+        from youtube_search import YoutubeSearch
+    except ImportError:
+        return []
+    try:
+        return YoutubeSearch(termo, max_results=6).to_dict()
+    except Exception:
+        return []
+
+
+def _url_do_resultado(video: dict) -> str:
+    """Monta a URL do YouTube a partir de um resultado da busca."""
+    sufixo = video.get("url_suffix")
+    if sufixo:
+        return "https://www.youtube.com" + sufixo
+    vid = video.get("id")
+    return f"https://youtu.be/{vid}" if vid else ""
+
+
 def _data_uri(dados: bytes, mimetype: str) -> str:
     b64 = base64.b64encode(dados).decode("ascii")
     return f"data:{mimetype};base64,{b64}"
@@ -192,7 +214,31 @@ with st.sidebar:
 
 # 1. Música
 st.subheader("1. Escolha a música")
-url = st.text_input("Link do YouTube (de preferência uma versão karaokê/instrumental)")
+consulta = st.text_input(
+    "Pesquise a música/artista ou cole um link do YouTube",
+    placeholder="Ex: Adele Hello karaoke",
+).strip()
+url = ""
+if consulta:
+    if youtube_id(consulta):
+        url = consulta  # colou um link direto
+    else:
+        resultados = buscar_youtube(consulta)
+        if resultados:
+            rotulos = {"— selecione uma versão —": ""}
+            for v in resultados:
+                rotulo = "🎵 {} ({}) — {}".format(
+                    v.get("title", "?"), v.get("duration", "?"), v.get("channel", "?")
+                )
+                rotulos[rotulo] = _url_do_resultado(v)
+            escolha = st.selectbox("Resultados encontrados:", list(rotulos))
+            url = rotulos[escolha]
+        else:
+            st.warning(
+                "Nada encontrado (ou a busca está indisponível). "
+                "Você também pode colar um link do YouTube acima."
+            )
+
 if url:
     st.video(url)
 if url and url != st.session_state.get("url_processada"):
