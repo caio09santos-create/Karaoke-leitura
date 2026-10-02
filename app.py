@@ -212,6 +212,16 @@ def _linha_placar(r: dict) -> dict:
     }
 
 
+def _texto_tendencia(cents: float | None) -> str:
+    """Traduz a tendência de afinação (cents assinado) em texto."""
+    if cents is None:
+        return "sem dados"
+    if abs(cents) <= 10:
+        return "bem no tom"
+    nivel = "um pouco " if abs(cents) <= 25 else ""
+    return f"{nivel}{'acima (agudo)' if cents > 0 else 'abaixo (grave)'}"
+
+
 # ---------- Interface ----------
 st.title("🎤 Karaokê - Nota de Leitura")
 st.caption("Cante acompanhando a letra e receba uma nota pelo quanto você acertou.")
@@ -406,10 +416,21 @@ else:
         c2.metric("Palavras certas", f"{resultado['acertos']} de {resultado['total']}")
         c3.metric("Afinação", f"{afinacao['nota']}/100" if afinacao else "-")
         if afinacao:
+            pct = round(afinacao["pct_afinado"] * 100)
+            tend = _texto_tendencia(afinacao["tendencia"])
             st.caption(
-                "Afinação = quanto você se manteve centrado nas notas (intonação), não se "
-                "cantou a melodia exata. Use fones de ouvido para uma medição melhor."
+                "Afinação = quão centrado nas notas (intonação), não a melodia exata. "
+                f"Afinado em {pct}% do tempo; tendência: {tend}. "
+                "Use fones de ouvido para uma medição melhor."
             )
+            serie = afinacao.get("serie")
+            if serie:
+                with st.expander("Ver afinação ao longo do tempo"):
+                    st.caption(
+                        "Sua nota (linha) comparada à nota alvo, em semitons. "
+                        "Quanto mais próximas, mais afinado."
+                    )
+                    st.line_chart(serie)
 
         if resultado["nota"] >= 90:
             st.success("Show! Você é a estrela da noite! 🌟")

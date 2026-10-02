@@ -22,7 +22,9 @@ prepara o microfone, dá play, e ao pausar ou terminar o vídeo a nota é calcul
 acontece por baixo dos panos.
 
 Além da nota de leitura, o resultado mostra uma **nota de afinação** (intonação): quão centrado
-nas notas da escala você cantou. É informativa e não checa se você seguiu a melodia exata.
+nas notas da escala você cantou. A pontuação é por nota sustentada (a mediana absorve o
+vibrato), com feedback de % afinado e tendência (agudo/grave) e um gráfico da sua nota vs a nota
+alvo ao longo do tempo. É informativa e não checa se você seguiu a melodia exata.
 
 Cada apresentação é salva num **histórico** local (SQLite) com um **placar** ordenado pela
 média de leitura + afinação. Informe "Seu nome" na barra lateral para aparecer no ranking.
