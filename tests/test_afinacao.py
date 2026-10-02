@@ -10,6 +10,19 @@ def _senoide(freq, dur=1.0, sr=SR):
     return np.sin(2 * np.pi * freq * t).astype(np.float32)
 
 
+def _senoide_cents(base=440.0, cents=0.0, dur=1.0, sr=SR):
+    """Senoide `cents` acima/abaixo de `base` (constante)."""
+    return _senoide(base * 2 ** (cents / 1200.0), dur=dur, sr=sr)
+
+
+def _vibrato(base=440.0, cents_amp=40.0, taxa_hz=5.5, dur=1.5, sr=SR):
+    """Senoide com vibrato: oscila ±`cents_amp` cents em torno de `base`."""
+    t = np.arange(int(dur * sr)) / sr
+    freq = base * 2 ** ((cents_amp * np.sin(2 * np.pi * taxa_hz * t)) / 1200.0)
+    fase = 2 * np.pi * np.cumsum(freq) / sr
+    return np.sin(fase).astype(np.float32)
+
+
 class TestExtrairF0:
     def test_detecta_frequencia_da_senoide(self):
         f0 = extrair_f0(_senoide(220.0))
@@ -46,3 +59,16 @@ class TestNotaAfinacao:
     def test_pouca_voz_retorna_none(self):
         f0 = np.array([np.nan] * 5 + [440.0] * 3)
         assert nota_afinacao(f0)["nota"] is None
+
+    def test_vibrato_nao_penaliza(self):
+        # vibrato ±40 cents em torno da nota: a mediana por nota deve manter nota alta
+        assert nota_afinacao(extrair_f0(_vibrato(cents_amp=40.0)))["nota"] > 80
+
+    def test_pct_afinado_alto_quando_afinado(self):
+        assert nota_afinacao(extrair_f0(_senoide(440.0)))["pct_afinado"] > 0.8
+
+    def test_tendencia_detecta_agudo(self):
+        assert nota_afinacao(extrair_f0(_senoide_cents(cents=30.0)))["tendencia"] > 20
+
+    def test_tendencia_detecta_grave(self):
+        assert nota_afinacao(extrair_f0(_senoide_cents(cents=-30.0)))["tendencia"] < -20

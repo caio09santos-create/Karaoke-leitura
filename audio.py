@@ -1,7 +1,7 @@
 """Baixa o áudio de um link (YouTube etc.) com yt-dlp, em formato tocável no navegador.
 
 O `import yt_dlp` é preguiçoso (dentro de `baixar_audio`) para o módulo poder ser
-importado — e testado — sem o pacote instalado. Escolhemos um formato de áudio já
+importado - e testado - sem o pacote instalado. Escolhemos um formato de áudio já
 tocável em `<audio>` (m4a/webm), evitando conversão via ffmpeg.
 """
 

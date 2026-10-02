@@ -2,7 +2,7 @@
 
 O HTML é renderizado no app com `st.components.v1.html` (roda em iframe isolado).
 A lógica de tempo é toda client-side (requestAnimationFrame), sem round-trips ao
-servidor — o Streamlit rerenderiza de cima a baixo e não atualiza por frame.
+servidor - o Streamlit rerenderiza de cima a baixo e não atualiza por frame.
 
 Com `audio_data_uri`, embute um <audio> e o realce segue o tempo real da faixa
 (`audio.currentTime`); sem áudio, usa um cronômetro manual (▶/⟲).
