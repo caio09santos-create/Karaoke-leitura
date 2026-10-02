@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from faster_whisper import WhisperModel
 
+import historico
 from afinacao import avaliar_afinacao
 from audio import baixar_audio, extrair_metadados, youtube_id
 from avaliacao import avaliar, normalizar_palavra
@@ -175,7 +176,7 @@ def montar_timeline(por_linha, synced) -> list[dict]:
 
 def mostrar_timeline(pontos):
     st.markdown(
-        "**Linha do tempo (informativo)** — quando você cantou cada trecho "
+        "**Linha do tempo (informativo)** - quando você cantou cada trecho "
         "comparado à referência da música:"
     )
     tabela = [
@@ -199,12 +200,25 @@ def mostrar_timeline(pontos):
     )
 
 
+def _linha_placar(r: dict) -> dict:
+    """Formata um registro do histórico para exibição em tabela (Média primeiro)."""
+    return {
+        "Cantor": r["cantor"],
+        "Música": f"{r.get('artista') or '?'} - {r.get('titulo') or '?'}",
+        "Média": round(r["media"]),
+        "Leitura": r["nota_leitura"],
+        "Afinação": r["afinacao"] if r["afinacao"] is not None else "-",
+        "Quando": r["data"].replace("T", " "),
+    }
+
+
 # ---------- Interface ----------
 st.title("🎤 Karaokê - Nota de Leitura")
 st.caption("Cante acompanhando a letra e receba uma nota pelo quanto você acertou.")
 
 with st.sidebar:
     st.header("Configurações")
+    st.text_input("Seu nome", key="cantor", placeholder="Convidado")
     idioma_nome = st.selectbox("Idioma da música", list(IDIOMAS))
     tamanho_modelo = st.selectbox(
         "Precisão do reconhecimento",
@@ -225,9 +239,9 @@ if consulta:
     else:
         resultados = buscar_youtube(consulta)
         if resultados:
-            rotulos = {"— selecione uma versão —": ""}
+            rotulos = {"(selecione uma versão)": ""}
             for v in resultados:
-                rotulo = "🎵 {} ({}) — {}".format(
+                rotulo = "🎵 {} ({}) - {}".format(
                     v.get("title", "?"), v.get("duration", "?"), v.get("channel", "?")
                 )
                 rotulos[rotulo] = _url_do_resultado(v)
@@ -256,7 +270,7 @@ if url and url != st.session_state.get("url_processada"):
             st.session_state["artista"] = meta["artista"]
             st.session_state["titulo"] = meta["titulo"]
         else:
-            st.info("Não consegui ler artista/título do vídeo — preencha abaixo.")
+            st.info("Não consegui ler artista/título do vídeo - preencha abaixo.")
 
         st.session_state["audio_musica"] = carregar_audio(url)
         if not st.session_state["audio_musica"]:
@@ -271,7 +285,7 @@ if url and url != st.session_state.get("url_processada"):
                 st.session_state["artista"] = dados.get("artista") or meta["artista"]
                 st.session_state["titulo"] = dados.get("titulo") or meta["titulo"]
             else:
-                st.info("Letra não encontrada automaticamente — ajuste os campos e busque abaixo.")
+                st.info("Letra não encontrada automaticamente - ajuste os campos e busque abaixo.")
 
 audio_musica = st.session_state.get("audio_musica")
 if audio_musica:
@@ -293,16 +307,16 @@ letra = st.text_area("Letra (você pode colar ou editar)", key="letra", height=2
 synced_atual = st.session_state.get("synced")
 if synced_atual and not audio_musica:
     st.caption(
-        "✨ Letra sincronizada encontrada — feedback por linha e linha do tempo no resultado."
+        "✨ Letra sincronizada encontrada - feedback por linha e linha do tempo no resultado."
     )
     with st.expander("🎤 Prévia sincronizada (cante junto)", expanded=True):
         st.caption(
-            "Clique ▶ (relógio manual) — a letra destaca a linha atual; 'atraso (s)' alinha. "
+            "Clique ▶ (relógio manual) - a letra destaca a linha atual; 'atraso (s)' alinha. "
             "Carregue o áudio acima para tocar e gravar juntos na etapa 3."
         )
         components.html(construir_player_sincronizado(synced_atual), height=400)
 elif synced_atual:
-    st.caption("✨ Letra sincronizada — na etapa 3 a base toca e grava junto, com realce ao vivo.")
+    st.caption("✨ Letra sincronizada - na etapa 3 a base toca e grava junto, com realce ao vivo.")
 
 # 3. Gravação
 st.subheader("3. Cante!")
@@ -330,7 +344,7 @@ if modo_base_ok or vid:
     else:
         st.caption(
             "Toque a base e clique **🎯 Alinhar 1ª linha** quando a 1ª linha começar (afine com "
-            "−/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
+            "-/+). Depois **▶ Iniciar**: a base toca e o microfone grava juntos; **⏹ Parar** ao "
             "terminar. Use fones de ouvido."
         )
         # key por música: troca de link remonta o componente com a base/letra novas
@@ -349,7 +363,7 @@ else:
 # 4. Nota (calculada automaticamente quando há gravação)
 st.subheader("4. Resultado")
 if not audio_bytes:
-    st.caption("Grave a sua voz na etapa 3 — a nota aparece aqui automaticamente.")
+    st.caption("Grave a sua voz na etapa 3 - a nota aparece aqui automaticamente.")
 elif not letra.strip():
     st.warning("Preencha a letra para calcular a nota.")
 else:
@@ -373,10 +387,24 @@ else:
     else:
         resultado = avaliar(letra, transcricao, hipotese_tempos=st.session_state.get("tempos"))
         afinacao = st.session_state.get("afinacao")
+
+        # salva no histórico uma única vez por gravação
+        if st.session_state.get("chave_salva") != chave:
+            st.session_state["chave_salva"] = chave
+            historico.salvar(
+                st.session_state.get("cantor") or "Convidado",
+                st.session_state.get("artista", ""),
+                st.session_state.get("titulo", ""),
+                resultado["nota"],
+                afinacao["nota"] if afinacao else None,
+                resultado["acertos"],
+                resultado["total"],
+            )
+
         c1, c2, c3 = st.columns(3)
         c1.metric("Nota (leitura)", f"{resultado['nota']}/100")
         c2.metric("Palavras certas", f"{resultado['acertos']} de {resultado['total']}")
-        c3.metric("Afinação", f"{afinacao['nota']}/100" if afinacao else "—")
+        c3.metric("Afinação", f"{afinacao['nota']}/100" if afinacao else "-")
         if afinacao:
             st.caption(
                 "Afinação = quanto você se manteve centrado nas notas (intonação), não se "
@@ -401,3 +429,20 @@ else:
         with st.expander("Ver o que o app entendeu"):
             st.write(f"Idioma detectado: `{st.session_state.get('idioma_det')}`")
             st.write(transcricao)
+
+# 5. Histórico e placar
+st.subheader("📊 Histórico e placar")
+_rank = historico.ranking()
+if _rank:
+    st.markdown("**🏆 Placar - por média de leitura + afinação**")
+    st.dataframe(
+        [{"#": f"{i}º", **_linha_placar(r)} for i, r in enumerate(_rank, 1)],
+        hide_index=True,
+        width="stretch",
+    )
+    st.markdown("**🕒 Apresentações recentes**")
+    st.dataframe(
+        [_linha_placar(r) for r in historico.recentes()], hide_index=True, width="stretch"
+    )
+else:
+    st.caption("Ainda não há apresentações registradas. Cante para aparecer aqui!")
