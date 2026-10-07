@@ -13,16 +13,21 @@ tempo, com a linha atual destacada seguindo a faixa; sem áudio, há um relógio
 com ajuste de "atraso".
 
 Como o áudio do YouTube costuma ser uma versão/edição diferente da referência da letra, há
-um botão **🎯 Alinhar 1ª linha**: toque a base e clique quando a primeira linha começar — o
-atraso é calculado automaticamente (com ajuste fino −/+), em vez de tentativa e erro.
+um botão **🎯 Alinhar 1ª linha**: toque a base e clique quando a primeira linha começar - o
+atraso é calculado automaticamente (com ajuste fino -/+), em vez de tentativa e erro.
 
 No passo 3 dá para escolher entre dois modos: **tocar a base aqui** (com realce da letra) ou
 **cantar com o vídeo do YouTube** (a letra aparece no próprio vídeo). No modo vídeo, você
-prepara o microfone, dá play, e ao pausar ou terminar o vídeo a nota é calculada — a gravação
+prepara o microfone, dá play, e ao pausar ou terminar o vídeo a nota é calculada - a gravação
 acontece por baixo dos panos.
 
 Além da nota de leitura, o resultado mostra uma **nota de afinação** (intonação): quão centrado
-nas notas da escala você cantou. É informativa e não checa se você seguiu a melodia exata.
+nas notas da escala você cantou. A pontuação é por nota sustentada (a mediana absorve o
+vibrato), com feedback de % afinado e tendência (agudo/grave) e um gráfico da sua nota vs a nota
+alvo ao longo do tempo. É informativa e não checa se você seguiu a melodia exata.
+
+Cada apresentação é salva num **histórico** local (SQLite) com um **placar** ordenado pela
+média de leitura + afinação. Informe "Seu nome" na barra lateral para aparecer no ranking.
 
 ## Estrutura
 
@@ -32,6 +37,7 @@ nas notas da escala você cantou. É informativa e não checa se você seguiu a 
 | `letras.py` | Busca de letras na API pública do [LRCLIB](https://lrclib.net) |
 | `avaliacao.py` | Tokenização e cálculo da nota de leitura (difflib + rapidfuzz) |
 | `afinacao.py` | Nota de afinação (pitch por autocorrelação em numpy; PyAV decodifica) |
+| `historico.py` | Histórico e placar das apresentações (SQLite) |
 | `audio.py` | Download do áudio do link (yt-dlp), em formato tocável no navegador |
 | `player.py` | Prompter de karaokê (HTML/JS) que destaca a linha atual ao vivo |
 | `gravador.py` + `karaoke_rec/` | Componente que toca a base e grava o microfone em um clique |
@@ -67,7 +73,7 @@ pip install -r requirements-dev.txt
 streamlit run app.py
 ```
 
-Dica: use **fones de ouvido** ao gravar — se o microfone captar a música, a voz do
+Dica: use **fones de ouvido** ao gravar - se o microfone captar a música, a voz do
 cantor original é contada como sua.
 
 ## Testes
@@ -77,7 +83,7 @@ pytest
 ```
 
 Os testes cobrem só a lógica (`avaliacao.py` e `letras.py`) e não importam `app.py`,
-então rodam com um conjunto enxuto de dependências (`requirements-test.txt`) — sem
+então rodam com um conjunto enxuto de dependências (`requirements-test.txt`) - sem
 precisar de `streamlit`/`faster-whisper`. É isso que o CI usa.
 
 ## CI

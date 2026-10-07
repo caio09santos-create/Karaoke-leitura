@@ -55,7 +55,7 @@
   </div>
   <div id="barra2">
     <button id="alinhar" type="button">🎯 Alinhar 1ª linha</button>
-    <button id="menos" type="button">−0,2s</button>
+    <button id="menos" type="button">-0,2s</button>
     <button id="mais" type="button">+0,2s</button>
     <span id="dica">toque a base e clique 🎯 quando a 1ª linha começar</span>
   </div>
@@ -215,7 +215,7 @@
       reader.onloadend = () => {
         const b64 = String(reader.result).split(",")[1] || "";
         Streamlit.setValue({ audio_b64: b64, mime: blob.type, duracao_s: dur });
-        elStatus.textContent = "✅ gravação enviada — clique em Calcular nota";
+        elStatus.textContent = "✅ gravação enviada - clique em Calcular nota";
         elBtn.disabled = false;
       };
       reader.readAsDataURL(blob);

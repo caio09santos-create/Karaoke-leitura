@@ -1,14 +1,17 @@
 """Nota de afinação (intonação) a partir da gravação, sem melodia de referência.
 
-Mede o quão centrado nas notas da escala temperada a pessoa canta: para os trechos
-com voz, quanto menor o desvio em cents da nota mais próxima, maior a nota. Usa numpy
-puro para a detecção de pitch (autocorrelação) e PyAV (import preguiçoso) só para
-decodificar o áudio gravado. Não verifica se a melodia da música foi seguida.
+Detecta o pitch (autocorrelação em numpy, PyAV só para decodificar), agrupa os
+quadros em notas sustentadas e mede, por nota, o desvio em cents da nota temperada
+mais próxima. Trabalhar por nota (mediana) absorve o vibrato e ignora transições.
+Não verifica se a melodia da música foi seguida.
 """
 
 import numpy as np
 
 SR = 16000
+_TAM = 1024
+_PASSO = 256
+_HOP_S = _PASSO / SR
 
 
 def _decodificar_pcm(audio_bytes: bytes, sr: int = SR) -> np.ndarray:
@@ -38,25 +41,22 @@ def extrair_f0(
     """f0 (Hz) por quadro via autocorrelação; NaN nos quadros sem voz."""
     if samples.size == 0:
         return np.zeros(0, dtype=np.float32)
-    tam = 1024
-    passo = 256
     lag_min = max(1, int(sr / fmax))
-    lag_max = min(tam - 1, int(sr / fmin))
+    lag_max = min(_TAM - 1, int(sr / fmin))
     f0 = []
-    for ini in range(0, len(samples) - tam, passo):
-        quadro = samples[ini : ini + tam].astype(np.float64)
+    for ini in range(0, len(samples) - _TAM, _PASSO):
+        quadro = samples[ini : ini + _TAM].astype(np.float64)
         quadro = quadro - quadro.mean()
         energia = np.dot(quadro, quadro)
         if energia < 1e-6:  # silêncio
             f0.append(np.nan)
             continue
-        corr = np.correlate(quadro, quadro, mode="full")[tam - 1 :]
+        corr = np.correlate(quadro, quadro, mode="full")[_TAM - 1 :]
         janela = corr[lag_min : lag_max + 1]
         if janela.size == 0:
             f0.append(np.nan)
             continue
         pico = int(np.argmax(janela)) + lag_min
-        # razão do pico sobre a energia = confiança de periodicidade (voz)
         if corr[pico] / energia < limiar_voz:
             f0.append(np.nan)
             continue
@@ -79,29 +79,103 @@ def desvio_cents(f0_hz: np.ndarray) -> np.ndarray:
     return (midi - np.round(midi)) * 100.0
 
 
-def nota_afinacao(f0: np.ndarray, min_voz: int = 20) -> dict:
-    """Calcula a nota de afinação a partir do f0 por quadro.
-
-    Retorna {nota, cents_medio, voz_frac}. `nota` é None quando há voz de menos.
-    """
+def _para_midi(f0: np.ndarray) -> np.ndarray:
+    """Converte f0 (Hz) em número MIDI; NaN onde não há voz."""
     f0 = np.asarray(f0, dtype=np.float64)
-    total = f0.size
-    voz = f0[np.isfinite(f0) & (f0 > 0)]
-    voz_frac = (voz.size / total) if total else 0.0
-    if voz.size < min_voz:
-        return {"nota": None, "cents_medio": None, "voz_frac": voz_frac}
-    cents_abs = np.abs(desvio_cents(voz))
-    mediana = float(np.median(cents_abs))
-    # 0 cents -> 100 ; 50 cents (quarto de tom, pior caso) -> 0
-    nota = int(round(max(0.0, min(100.0, 100.0 * (1.0 - mediana / 50.0)))))
-    return {"nota": nota, "cents_medio": round(mediana, 1), "voz_frac": round(voz_frac, 2)}
+    valido = np.isfinite(f0) & (f0 > 0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(valido, 69.0 + 12.0 * np.log2(np.where(valido, f0, 1.0) / 440.0), np.nan)
+
+
+def _segmentar(f0: np.ndarray, min_frames: int = 6, tol_semitom: float = 0.7):
+    """Agrupa quadros com voz em notas sustentadas.
+
+    Retorna (segmentos, alvo_por_frame): `segmentos` é a lista de arrays de MIDI de
+    cada nota; `alvo_por_frame` tem a nota arredondada por quadro (NaN fora de nota).
+    Começa nova nota quando há lacuna sem voz ou salto > `tol_semitom` da mediana.
+    """
+    midi = _para_midi(f0)
+    alvo = np.full(midi.size, np.nan)
+    segmentos: list[np.ndarray] = []
+    atual: list[int] = []
+
+    def fechar():
+        if len(atual) >= min_frames:
+            vals = midi[atual]
+            segmentos.append(vals)
+            alvo[atual] = round(float(np.median(vals)))
+
+    for i, m in enumerate(midi):
+        if np.isnan(m):
+            fechar()
+            atual = []
+            continue
+        if atual and abs(m - np.median(midi[atual])) > tol_semitom:
+            fechar()
+            atual = []
+        atual.append(i)
+    fechar()
+    return segmentos, alvo
+
+
+def nota_afinacao(f0: np.ndarray) -> dict:
+    """Nota de afinação por nota sustentada (mediana vs nota mais próxima).
+
+    Retorna {nota, cents_medio, voz_frac, pct_afinado, tendencia}. `nota` é None
+    quando não há notas sustentadas suficientes.
+    """
+    total = int(np.asarray(f0).size)
+    segmentos, _ = _segmentar(f0)
+    voz = sum(int(s.size) for s in segmentos)
+    voz_frac = round(voz / total, 2) if total else 0.0
+    if not segmentos:
+        return {
+            "nota": None,
+            "cents_medio": None,
+            "voz_frac": voz_frac,
+            "pct_afinado": 0.0,
+            "tendencia": None,
+        }
+
+    cents_abs, cents_sig, pesos = [], [], []
+    dur_total = dur_afinado = 0
+    for s in segmentos:
+        med = float(np.median(s))
+        desvio = (med - round(med)) * 100.0
+        cents_abs.append(abs(desvio))
+        cents_sig.append(desvio)
+        pesos.append(s.size)
+        dur_total += s.size
+        if abs(desvio) <= 25:
+            dur_afinado += s.size
+
+    pesos_arr = np.array(pesos, dtype=float)
+    cents_medio = float(np.average(cents_abs, weights=pesos_arr))
+    tendencia = float(np.average(cents_sig, weights=pesos_arr))
+    nota = int(round(max(0.0, min(100.0, 100.0 * (1.0 - cents_medio / 50.0)))))
+    return {
+        "nota": nota,
+        "cents_medio": round(cents_medio, 1),
+        "voz_frac": voz_frac,
+        "pct_afinado": round(dur_afinado / dur_total, 2) if dur_total else 0.0,
+        "tendencia": round(tendencia, 1),
+    }
 
 
 def avaliar_afinacao(audio_bytes: bytes) -> dict | None:
-    """Decodifica a gravação e devolve a nota de afinação, ou None em caso de falha."""
+    """Decodifica a gravação e devolve a nota de afinação + série do gráfico, ou None."""
     try:
         samples = _decodificar_pcm(audio_bytes)
     except Exception:
         return None
-    resultado = nota_afinacao(extrair_f0(samples))
-    return resultado if resultado["nota"] is not None else None
+    f0 = extrair_f0(samples)
+    resultado = nota_afinacao(f0)
+    if resultado["nota"] is None:
+        return None
+    _, alvo = _segmentar(f0)
+    midi = _para_midi(f0)
+    resultado["serie"] = {
+        "Você": [None if np.isnan(x) else round(float(x), 2) for x in midi],
+        "Nota alvo": [None if np.isnan(x) else float(x) for x in alvo],
+    }
+    return resultado
