@@ -5,25 +5,34 @@
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
-    #barra { display: flex; align-items: center; gap: 10px; padding: 6px 4px; flex-wrap: wrap; }
-    #prep {
-      font-size: 15px; font-weight: 600; padding: 8px 16px; cursor: pointer;
-      border: none; border-radius: 8px; background: #1e9e4a; color: #fff;
+    /* vídeo ocupa toda a largura; a altura segue a proporção 16:9 */
+    #tela { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+    #tela iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    /* camada "calculando" por cima do vídeo (só na tela de usuário) */
+    #calc {
+      position: absolute; inset: 0; z-index: 2; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      background: rgba(10, 10, 20, 0.82); color: #fff; text-align: center;
     }
-    #prep:disabled { opacity: .5; cursor: default; }
-    #status { font-size: 13px; color: #555; }
-    #erro { color: #d63333; font-size: 13px; padding: 4px; }
-    #player { width: 100%; }
-    #player iframe { width: 100%; height: 315px; border: 0; }
+    #calc.on { display: flex; }
+    #calc-num {
+      font-size: min(32vw, 220px); font-weight: 800; line-height: 1;
+      font-variant-numeric: tabular-nums; color: #3ddc84;
+      text-shadow: 0 0 24px rgba(61, 220, 132, 0.55);
+    }
+    #calc-txt { font-size: 22px; margin-top: 14px; opacity: .9; animation: pulsar 1s infinite; }
+    @keyframes pulsar { 50% { opacity: .35; } }
+    #status { font-size: 13px; color: #555; padding: 8px 2px 2px; }
+    #erro { color: #d63333; font-size: 13px; padding: 2px; }
   </style>
 </head>
 <body>
-  <div id="barra">
-    <button id="prep" type="button">🎤 Preparar microfone</button>
-    <span id="status">prepare o microfone e dê play no vídeo</span>
+  <div id="tela">
+    <div id="player"></div>
+    <div id="calc"><div id="calc-num">00</div><div id="calc-txt">Calculando sua nota...</div></div>
   </div>
+  <div id="status">Carregando o vídeo...</div>
   <div id="erro"></div>
-  <div id="player"></div>
 
   <script>
     // ---- Protocolo v1 de componente do Streamlit (implementado à mão) ----
@@ -45,11 +54,16 @@
     let mediaRecorder = null;
     let chunks = [];
     let gravando = false;
+    let pedindo = false;
+    let sobrepor = false;
     let t0 = 0;
 
-    const elPrep = document.getElementById("prep");
     const elStatus = document.getElementById("status");
     const elErro = document.getElementById("erro");
+
+    // a altura do componente acompanha o conteúdo (o vídeo cresce com a largura)
+    function ajustarAltura() { Streamlit.setHeight(document.body.scrollHeight); }
+    new ResizeObserver(ajustarAltura).observe(document.body);
 
     function criarPlayer() {
       if (!apiReady || !VIDEO_ID || player) return;
@@ -61,27 +75,54 @@
     }
     window.onYouTubeIframeAPIReady = function () { apiReady = true; criarPlayer(); };
 
-    elPrep.addEventListener("click", async () => {
-      elErro.textContent = "";
+    async function micLiberado() {
+      try {
+        const p = await navigator.permissions.query({ name: "microphone" });
+        return p.state === "granted";
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function pegarMic() {
+      if (stream) return true;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        elPrep.disabled = true;
-        elStatus.textContent = "🎤 microfone pronto - dê play no vídeo para gravar";
+        return true;
       } catch (e) {
-        elErro.textContent = "Não foi possível acessar o microfone. Permita o acesso e tente de novo.";
+        elErro.textContent =
+          "Não consegui acessar o microfone. Libere no cadeado da barra de endereço.";
+        return false;
       }
-    });
+    }
 
-    function onState(e) {
+    async function onState(e) {
       if (e.data === YT.PlayerState.PLAYING) {
-        if (stream && !gravando) iniciarGravacao();
-        else if (!stream) elErro.textContent = "Clique em 🎤 Preparar microfone antes de tocar.";
+        if (gravando || pedindo) return;
+        if (!stream) {
+          pedindo = true;
+          const jaLiberado = await micLiberado();
+          // sem permissão ainda: pausa enquanto o navegador pergunta, e retoma depois
+          if (!jaLiberado) player.pauseVideo();
+          const ok = await pegarMic();
+          pedindo = false;
+          if (!ok) {
+            player.pauseVideo();
+            return;
+          }
+          if (!jaLiberado) {
+            player.playVideo();  // o novo PLAYING inicia a gravação
+            return;
+          }
+        }
+        iniciarGravacao();
       } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
         if (gravando) pararGravacao();
       }
     }
 
     function iniciarGravacao() {
+      elErro.textContent = "";
       chunks = [];
       try {
         mediaRecorder = new MediaRecorder(stream);
@@ -93,16 +134,29 @@
       mediaRecorder.start();
       t0 = performance.now();
       gravando = true;
-      elStatus.textContent = "🔴 gravando… pause ou termine o vídeo para calcular a nota";
+      elStatus.textContent = "🔴 Gravando. Pause ou deixe o vídeo terminar para ver a nota.";
     }
 
     function pararGravacao() {
       if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
       gravando = false;
-      elStatus.textContent = "processando…";
+      elStatus.textContent = "Processando...";
+      if (sobrepor) mostrarCalculo();
+    }
+
+    function mostrarCalculo() {
+      // números trocando rápido enquanto o app calcula a nota
+      const elNum = document.getElementById("calc-num");
+      document.getElementById("calc").classList.add("on");
+      setInterval(() => {
+        elNum.textContent = String(Math.floor(Math.random() * 100)).padStart(2, "0");
+      }, 70);
     }
 
     function enviarGravacao() {
+      // libera o microfone (apaga o indicador de gravação do navegador)
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null;
       const mime = (mediaRecorder && mediaRecorder.mimeType) || "audio/webm";
       const blob = new Blob(chunks, { type: mime });
       const dur = (performance.now() - t0) / 1000;
@@ -110,20 +164,25 @@
       reader.onloadend = () => {
         const b64 = String(reader.result).split(",")[1] || "";
         Streamlit.setValue({ audio_b64: b64, mime: blob.type, duracao_s: dur });
-        elStatus.textContent = "✅ gravação enviada - veja a nota abaixo";
+        elStatus.textContent = "✅ Gravação enviada.";
       };
       reader.readAsDataURL(blob);
     }
 
-    function onRender(args) {
+    async function onRender(args) {
       if (montado) return;
       montado = true;
       VIDEO_ID = (args && args.video_id) || null;
+      sobrepor = Boolean(args && args.sobrepor);
       if (!VIDEO_ID) {
         elErro.textContent = "Link do YouTube inválido.";
         return;
       }
-      Streamlit.setHeight(420);
+      ajustarAltura();
+      elStatus.textContent = (await micLiberado())
+        ? "🎤 Dê play no vídeo e cante: a gravação começa junto."
+        : "🎤 Dê play no vídeo e cante. Na primeira vez o navegador pede o microfone "
+          + "(ou libere antes em Preparação, na barra lateral).";
       const tag = document.createElement("script");
       tag.src = "https://www.youtube.com/iframe_api";
       document.head.appendChild(tag);

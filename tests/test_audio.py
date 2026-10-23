@@ -2,13 +2,27 @@ import sys
 import types
 
 from audio import (
+    _dados_video,
     _limpar_titulo,
     _mimetype_por_ext,
     _opcoes_ydl,
     _parsear_artista_titulo,
     baixar_audio,
+    termo_karaoke,
     youtube_id,
 )
+
+
+class TestTermoKaraoke:
+    def test_acrescenta_karaoke(self):
+        assert termo_karaoke("adele hello") == "adele hello karaoke"
+
+    def test_nao_duplica_quando_ja_tem(self):
+        assert termo_karaoke("adele hello karaoke") == "adele hello karaoke"
+        assert termo_karaoke("Adele Hello KARAOKÊ") == "Adele Hello KARAOKÊ"
+
+    def test_termo_vazio(self):
+        assert termo_karaoke("   ") == ""
 
 
 class TestYoutubeId:
@@ -134,3 +148,27 @@ class TestParsearArtistaTitulo:
             "uploader": "PARTY TYME KARAOKE EN ESPAÑOL",
         }
         assert _parsear_artista_titulo(info) == ("Alejandro Sanz", "No Me Compares")
+
+
+class TestDadosVideo:
+    def test_extrai_campos_do_video(self):
+        info = {
+            "title": " Hello (Karaoke) ",
+            "channel": "Sing King",
+            "duration": 295,
+            "view_count": 1200,
+        }
+        assert _dados_video(info) == {
+            "video": "Hello (Karaoke)",
+            "canal": "Sing King",
+            "duracao": 295,
+            "visualizacoes": 1200,
+        }
+
+    def test_usa_uploader_e_tolera_campos_ausentes(self):
+        assert _dados_video({"uploader": "Canal X"}) == {
+            "video": "",
+            "canal": "Canal X",
+            "duracao": None,
+            "visualizacoes": None,
+        }

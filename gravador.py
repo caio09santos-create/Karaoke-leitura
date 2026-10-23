@@ -39,9 +39,17 @@ def gravar_cantando(
     return _decode_gravacao(valor)
 
 
-def gravar_com_video(video_id: str, key: str = "karaoke_yt") -> tuple[bytes, str] | None:
-    """Grava o microfone enquanto o vídeo do YouTube toca. (bytes, mime) ou None."""
-    valor = _get_componente("karaoke_yt")(video_id=video_id, key=key, default=None)
+def gravar_com_video(
+    video_id: str, key: str = "karaoke_yt", sobrepor: bool = False
+) -> tuple[bytes, str] | None:
+    """Grava o microfone enquanto o vídeo do YouTube toca. (bytes, mime) ou None.
+
+    Com `sobrepor`, ao terminar a gravação o componente cobre o vídeo com uma
+    animação de "calculando" (fica até o componente sair da tela).
+    """
+    valor = _get_componente("karaoke_yt")(
+        video_id=video_id, sobrepor=sobrepor, key=key, default=None
+    )
     return _decode_gravacao(valor)
 
 
