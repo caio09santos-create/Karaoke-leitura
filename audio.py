@@ -21,6 +21,14 @@ _MIMETYPES = {
 }
 
 
+def termo_karaoke(termo: str) -> str:
+    """Acrescenta "karaoke" ao termo de busca, se a pessoa ainda não escreveu."""
+    termo = termo.strip()
+    if not termo or "karaok" in termo.lower():
+        return termo
+    return f"{termo} karaoke"
+
+
 def youtube_id(url: str) -> str | None:
     """Extrai o ID do vídeo de uma URL do YouTube (youtu.be, watch, shorts...)."""
     u = urlparse(url)

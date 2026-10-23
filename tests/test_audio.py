@@ -7,8 +7,21 @@ from audio import (
     _opcoes_ydl,
     _parsear_artista_titulo,
     baixar_audio,
+    termo_karaoke,
     youtube_id,
 )
+
+
+class TestTermoKaraoke:
+    def test_acrescenta_karaoke(self):
+        assert termo_karaoke("adele hello") == "adele hello karaoke"
+
+    def test_nao_duplica_quando_ja_tem(self):
+        assert termo_karaoke("adele hello karaoke") == "adele hello karaoke"
+        assert termo_karaoke("Adele Hello KARAOKÊ") == "Adele Hello KARAOKÊ"
+
+    def test_termo_vazio(self):
+        assert termo_karaoke("   ") == ""
 
 
 class TestYoutubeId:

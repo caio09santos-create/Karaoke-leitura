@@ -29,6 +29,13 @@ alvo ao longo do tempo. É informativa e não checa se você seguiu a melodia ex
 Cada apresentação é salva num **histórico** local (SQLite) com um **placar** ordenado pela
 média de leitura + afinação. Informe "Seu nome" na barra lateral para aparecer no ranking.
 
+O app abre numa **tela de usuário** simplificada: ponha o nome, busque o vídeo, dê play, cante,
+e ao pausar ou terminar o vídeo a **nota final** (média de leitura + afinação) aparece com o
+ranking. A busca já procura versões karaokê (o app acrescenta "karaoke" ao termo), a gravação
+começa sozinha junto com o play, e o botão **🏆 Ver ranking** abre o placar a qualquer momento.
+Na barra lateral, a seção **Preparação** libera e testa o microfone (basta fazer uma vez). Um toggle **"🛠️ Modo desenvolvedor"** na barra lateral revela a tela completa (busca,
+letra, calibração, feedback por linha, timeline, afinação detalhada e placar).
+
 ## Estrutura
 
 | Arquivo | Responsabilidade |
