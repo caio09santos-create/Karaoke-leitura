@@ -2,6 +2,7 @@ import sys
 import types
 
 from audio import (
+    _dados_video,
     _limpar_titulo,
     _mimetype_por_ext,
     _opcoes_ydl,
@@ -147,3 +148,27 @@ class TestParsearArtistaTitulo:
             "uploader": "PARTY TYME KARAOKE EN ESPAÑOL",
         }
         assert _parsear_artista_titulo(info) == ("Alejandro Sanz", "No Me Compares")
+
+
+class TestDadosVideo:
+    def test_extrai_campos_do_video(self):
+        info = {
+            "title": " Hello (Karaoke) ",
+            "channel": "Sing King",
+            "duration": 295,
+            "view_count": 1200,
+        }
+        assert _dados_video(info) == {
+            "video": "Hello (Karaoke)",
+            "canal": "Sing King",
+            "duracao": 295,
+            "visualizacoes": 1200,
+        }
+
+    def test_usa_uploader_e_tolera_campos_ausentes(self):
+        assert _dados_video({"uploader": "Canal X"}) == {
+            "video": "",
+            "canal": "Canal X",
+            "duracao": None,
+            "visualizacoes": None,
+        }

@@ -103,8 +103,21 @@ def _parsear_artista_titulo(info: dict) -> tuple[str, str]:
     return canal.strip(" -"), _limpar_titulo(titulo_bruto)
 
 
+def _dados_video(info: dict) -> dict:
+    """Título, canal, duração (s) e visualizações do vídeo, para exibir na tela."""
+    return {
+        "video": (info.get("title") or "").strip(),
+        "canal": (info.get("channel") or info.get("uploader") or "").strip(),
+        "duracao": info.get("duration"),
+        "visualizacoes": info.get("view_count"),
+    }
+
+
 def extrair_metadados(url: str) -> dict | None:
-    """Lê os metadados do vídeo (sem baixar). Retorna {'artista', 'titulo'} ou None."""
+    """Lê os metadados do vídeo (sem baixar).
+
+    Retorna {'artista', 'titulo', 'video', 'canal', 'duracao', 'visualizacoes'} ou None.
+    """
     try:
         import yt_dlp
     except ImportError:
@@ -120,7 +133,7 @@ def extrair_metadados(url: str) -> dict | None:
     artista, titulo = _parsear_artista_titulo(info)
     if not titulo:
         return None
-    return {"artista": artista, "titulo": titulo}
+    return {"artista": artista, "titulo": titulo, **_dados_video(info)}
 
 
 def baixar_audio(url: str) -> tuple[bytes, str] | None:

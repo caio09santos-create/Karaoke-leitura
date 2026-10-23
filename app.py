@@ -21,7 +21,11 @@ from letras import buscar_letra_sincronizada
 from microfone import HTML_CHECAGEM
 from player import construir_player_sincronizado
 
-st.set_page_config(page_title="Karaokê - Nota de Leitura", page_icon="🎤")
+st.set_page_config(
+    page_title="Karaokê - Nota de Leitura",
+    page_icon="🎤",
+    layout="centered" if st.session_state.get("modo_dev") else "wide",
+)
 
 IDIOMAS = {
     "Detectar automaticamente": None,
@@ -228,10 +232,14 @@ def _mostrar_resultado_usuario(res: dict):
     final = res["final"]
     af_txt = res["afinacao"] if res["afinacao"] is not None else "-"
     st.markdown(
-        "<div style='text-align:center;margin:12px 0'>"
-        "<div style='font-size:20px;color:#666'>Sua nota</div>"
-        f"<div style='font-size:84px;font-weight:800;color:#1e9e4a;line-height:1'>{final}</div>"
-        f"<div style='color:#888'>leitura {res['leitura']} · afinação {af_txt}</div>"
+        "<style>@keyframes surgir {0% {transform: scale(.4); opacity: 0}"
+        " 70% {transform: scale(1.08); opacity: 1} 100% {transform: scale(1)}}</style>"
+        "<div style='text-align:center;margin:8px 0 18px'>"
+        "<div style='font-size:30px;color:#666'>Sua nota</div>"
+        "<div style='font-size:200px;font-weight:800;color:#1e9e4a;line-height:1;"
+        f"animation:surgir .7s ease-out'>{final}</div>"
+        f"<div style='font-size:20px;color:#888'>leitura {res['leitura']}"
+        f" · afinação {af_txt}</div>"
         "</div>",
         unsafe_allow_html=True,
     )
@@ -265,38 +273,68 @@ def dialog_ranking():
     _mostrar_ranking()
 
 
-def tela_usuario():
-    """Tela simplificada: nome, buscar vídeo, cantar e ver a nota final + ranking."""
-    col_titulo, col_rank = st.columns([4, 1], vertical_alignment="center")
-    col_titulo.title("🎤 Karaokê")
-    if col_rank.button("🏆 Ver ranking", width="stretch"):
-        dialog_ranking()
-    st.caption("Escolha a música, cante e veja a sua nota.")
-    nome = st.text_input("Seu nome", key="cantor", placeholder="Convidado")
+def _contagem(n: int | None) -> str:
+    """Formata números grandes de forma curta (ex.: 1,2 mi, 35 mil)."""
+    if not n:
+        return ""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f} mi".replace(".", ",")
+    if n >= 1_000:
+        return f"{n // 1_000} mil"
+    return str(n)
 
-    consulta = st.text_input(
-        "Qual música você quer cantar?", placeholder="Ex: Adele Hello"
-    ).strip()
-    url = ""
-    if consulta:
-        if youtube_id(consulta):
-            url = consulta
-        else:
-            resultados = buscar_youtube(consulta)
-            if resultados:
-                rotulos = {"(selecione uma versão)": ""}
-                for v in resultados:
-                    rotulo = "🎵 {} ({}) - {}".format(
-                        v.get("title", "?"), v.get("duration", "?"), v.get("channel", "?")
-                    )
-                    rotulos[rotulo] = _url_do_resultado(v)
-                url = rotulos[st.selectbox("Escolha a versão:", list(rotulos))]
+
+def _mostrar_info_video(meta: dict | None, artista: str, titulo: str):
+    """Nome e metadados do vídeo, exibidos embaixo dele."""
+    meta = meta or {}
+    st.subheader(meta.get("video") or f"{artista} - {titulo}")
+    detalhes = []
+    if artista or titulo:
+        detalhes.append(f"🎵 {artista} - {titulo}")
+    if meta.get("canal"):
+        detalhes.append(f"📺 {meta['canal']}")
+    if meta.get("duracao"):
+        detalhes.append(f"⏱️ {_mmss(meta['duracao'])}")
+    if meta.get("visualizacoes"):
+        detalhes.append(f"👁️ {_contagem(meta['visualizacoes'])} visualizações")
+    if detalhes:
+        st.caption("  ·  ".join(detalhes))
+
+
+def tela_usuario(barra):
+    """Tela simplificada: entradas na barra lateral; no painel, o vídeo e depois a nota."""
+    with barra:
+        st.subheader("🎤 Sua vez")
+        nome = st.text_input("Seu nome", key="cantor", placeholder="Convidado")
+        consulta = st.text_input(
+            "Qual música você quer cantar?", placeholder="Ex: Adele Hello"
+        ).strip()
+        url = ""
+        if consulta:
+            if youtube_id(consulta):
+                url = consulta
             else:
-                st.warning("Nada encontrado. Tente outro termo ou cole um link do YouTube.")
+                resultados = buscar_youtube(consulta)
+                if resultados:
+                    rotulos = {"(selecione uma versão)": ""}
+                    for v in resultados:
+                        rotulo = "🎵 {} ({}) - {}".format(
+                            v.get("title", "?"), v.get("duration", "?"), v.get("channel", "?")
+                        )
+                        rotulos[rotulo] = _url_do_resultado(v)
+                    url = rotulos[st.selectbox("Escolha a versão:", list(rotulos))]
+                else:
+                    st.warning("Nada encontrado. Tente outro termo ou cole um link do YouTube.")
+        if st.button("🏆 Ver ranking", width="stretch"):
+            dialog_ranking()
 
     vid = youtube_id(url) if url else None
     if not vid:
-        st.info("Busque e selecione uma música para começar.")
+        st.title("🎤 Karaokê")
+        st.markdown(
+            "Busque uma música na barra lateral, dê play no vídeo e cante. "
+            "A sua nota aparece no final."
+        )
         return
 
     # trocar de vídeo reinicia o fluxo
@@ -310,12 +348,13 @@ def tela_usuario():
     # letra por baixo dos panos (necessária para a nota de leitura)
     meta = carregar_metadados(url)
     dados = buscar_letra_cache(meta["artista"], meta["titulo"]) if meta else None
+    artista = (dados or {}).get("artista") or (meta["artista"] if meta else "")
+    titulo = (dados or {}).get("titulo") or (meta["titulo"] if meta else "")
     if not dados:
+        _mostrar_info_video(meta, artista, titulo)
         st.warning("Não encontrei a letra dessa versão. Tente outra versão da música.")
         return
     letra = dados["plain"]
-    artista = dados.get("artista") or (meta["artista"] if meta else "")
-    titulo = dados.get("titulo") or (meta["titulo"] if meta else "")
 
     fase = st.session_state.get("fase_user", "cantando")
     tentativa = st.session_state.get("tentativa_user", 0)
@@ -331,27 +370,28 @@ def tela_usuario():
         return
 
     if fase == "calculando":
-        with st.spinner("Calculando sua nota..."):
-            audio_bytes = st.session_state.get("audio_user")
-            transcricao, _, tempos = transcrever(audio_bytes, None, "small")
-            afin = avaliar_afinacao(audio_bytes)
-            leitura = (
-                avaliar(letra, transcricao, hipotese_tempos=tempos)
-                if transcricao.strip()
-                else None
-            )
-            af_nota = afin["nota"] if afin else None
-            leitura_nota = leitura["nota"] if leitura else 0
-            final = historico.media_pontos(leitura_nota, af_nota)
-            historico.salvar(
-                nome or "Convidado",
-                artista,
-                titulo,
-                leitura_nota,
-                af_nota,
-                leitura["acertos"] if leitura else 0,
-                leitura["total"] if leitura else 0,
-            )
+        # o vídeo segue montado (mesma chave): o componente mostra os números
+        # rodando por cima dele enquanto a nota é calculada aqui
+        gravar_com_video(vid, key=f"user_{vid}_{tentativa}", sobrepor=True)
+        _mostrar_info_video(meta, artista, titulo)
+        audio_bytes = st.session_state.get("audio_user")
+        transcricao, _, tempos = transcrever(audio_bytes, None, "small")
+        afin = avaliar_afinacao(audio_bytes)
+        leitura = (
+            avaliar(letra, transcricao, hipotese_tempos=tempos) if transcricao.strip() else None
+        )
+        af_nota = afin["nota"] if afin else None
+        leitura_nota = leitura["nota"] if leitura else 0
+        final = historico.media_pontos(leitura_nota, af_nota)
+        historico.salvar(
+            nome or "Convidado",
+            artista,
+            titulo,
+            leitura_nota,
+            af_nota,
+            leitura["acertos"] if leitura else 0,
+            leitura["total"] if leitura else 0,
+        )
         st.session_state["resultado_user"] = {
             "final": final,
             "leitura": leitura_nota,
@@ -360,12 +400,10 @@ def tela_usuario():
         st.session_state["fase_user"] = "resultado"
         st.rerun()
 
-    # fase "cantando"
-    st.caption(
-        "Dê play no vídeo e cante: a gravação começa junto. Ao pausar ou terminar, "
-        "sua nota aparece. Use fones de ouvido."
-    )
-    gravacao = gravar_com_video(vid, key=f"user_{vid}_{tentativa}")
+    # fase "cantando": o vídeo no topo do painel, nome e metadados embaixo dele
+    gravacao = gravar_com_video(vid, key=f"user_{vid}_{tentativa}", sobrepor=True)
+    _mostrar_info_video(meta, artista, titulo)
+    st.caption("Ao pausar ou terminar o vídeo, sua nota aparece. Use fones de ouvido.")
     if gravacao:
         st.session_state["audio_user"] = gravacao[0]
         st.session_state["fase_user"] = "calculando"
@@ -379,7 +417,7 @@ barra_conteudo = st.sidebar.container()
 barra_rodape = st.sidebar.container()
 with barra_rodape:
     st.divider()
-    modo_dev = st.toggle("🛠️ Modo desenvolvedor", value=False)
+    modo_dev = st.toggle("🛠️ Modo desenvolvedor", value=False, key="modo_dev")
 
 with barra_conteudo:
     st.subheader("🎚️ Preparação")
@@ -387,7 +425,7 @@ with barra_conteudo:
     components.html(HTML_CHECAGEM, height=125)
 
 if not modo_dev:
-    tela_usuario()
+    tela_usuario(barra_conteudo)
     st.stop()
 
 # ----- Modo desenvolvedor (tela completa) -----
